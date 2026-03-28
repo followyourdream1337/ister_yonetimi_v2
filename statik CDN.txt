@@ -1,0 +1,11 @@
+# ANA MENU , # RAPORLAR, # KARŞILASTIRMA html sayfalarında:
+
+
+STATİK DOSYA İLE:
+
+<script src="static/js/chart.umd.min.js"></script>
+
+
+LİNK İLE:
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>     
