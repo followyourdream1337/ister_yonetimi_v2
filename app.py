@@ -7,10 +7,10 @@ from enum import Enum
 
 app = Flask(__name__)
 app.secret_key = 'ister_v2_secret_2024'
-app.config['MYSQL_HOST'] = 'localhost'
-app.config['MYSQL_USER'] = 'root'
-app.config['MYSQL_PASSWORD'] = 'Rz123456.'
-app.config['MYSQL_DB'] = 'ister_v2'
+app.config['MYSQL_HOST'] = 'sql8.freesqldatabase.com'
+app.config['MYSQL_USER'] = 'sql8820996'
+app.config['MYSQL_PASSWORD'] = 'KjmvNC1FV6'
+app.config['MYSQL_DB'] = 'sql8820996'
 app.config['MYSQL_CHARSET'] = 'utf8mb4'
 mysql = MySQL(app)
 
