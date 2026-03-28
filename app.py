@@ -1008,9 +1008,16 @@ def kullanici_sil(uid):
     if uid == session.get('kullanici_id'):
         return jsonify({'hata': 'Kendi hesabınızı silemezsiniz.'}), 400
     cur = mysql.connection.cursor()
-    cur.execute("DELETE FROM kullanici WHERE KullaniciID=%s", (uid,))
-    log_kaydet('kullanici', uid, 'Kullanıcılar', 'Silindi', '-', LogTur.DELETE.value)
-    mysql.connection.commit(); cur.close(); return jsonify({'ok': True})
+    cur.execute("SELECT KullaniciAdi FROM kullanici WHERE KullaniciID=%s",(uid,))
+    user=cur.fetchone()
+    if not user:
+        cur.close()
+        return jsonify({'hata':'Kullanıcı bulunamadı'}),404
+    kullanici_adi=user[0]
+    cur.execute("DELETE FROM kullanici WHERE KullaniciID=%s",(uid,))
+    log_kaydet('kullanici',uid,'Kullanıcılar',kullanici_adi,'-',LogTur.DELETE.value)
+    mysql.connection.commit();cur.close()
+    return jsonify({'ok':True})
 
 # ── TEST YÖNTEMİ ──────────────────────────────────────────────────────────────
 @app.route('/api/test_yontemi', methods=['GET'])
