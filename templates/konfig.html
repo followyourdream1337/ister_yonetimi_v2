@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Konfigürasyonlar{% endblock %}
+{% block page_title %}Konfigürasyonlar{% endblock %}
+{% block page_sub %}Tanımlar{% endblock %}
+{% block topbar_actions %}<button class="btn btn-primary" onclick="modalAc()">+ Yeni Konfigürasyon</button>{% endblock %}
+{% block content %}
+<div class="card">
+  <input id="arama" placeholder="Ara..." style="max-width:260px;margin-bottom:12px" oninput="filtrele()">
+  <table><thead><tr><th>#</th><th>Konfigürasyon Adı</th><th style="width:110px">İşlem</th></tr></thead>
+  <tbody id="tablo"></tbody></table>
+</div>
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <div class="modal-hd"><div class="modal-title" id="m-baslik">Yeni Konfigürasyon</div><span class="modal-close" onclick="modalKapat()">✕</span></div>
+    <div id="m-alert"></div>
+    <div class="fg"><label class="fl">Konfigürasyon Adı</label><input type="text" id="m-adi"></div>
+    <div class="modal-ft"><button class="btn btn-ghost" onclick="modalKapat()">İptal</button><button class="btn btn-primary" onclick="kaydet()">Kaydet</button></div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let data=[],duz=null;
+function yukle(){fetch('/api/konfig').then(r=>r.json()).then(d=>{data=d;render(d)})}
+function render(list){
+  const t=document.getElementById('tablo');
+  if(!list.length){t.innerHTML='<tr><td colspan="3" class="empty">Konfigürasyon yok</td></tr>';return}
+  t.innerHTML=list.map(r=>`<tr><td style="font-family:monospace;font-size:10px;color:var(--text3)">${r.KonfigID}</td><td>${r.KonfigAdi}</td><td>
+    <button class="btn btn-ghost btn-sm" onclick="duzenle(${r.KonfigID},'${r.KonfigAdi.replace(/'/g,"\\'")}')">Düzenle</button>
+    <button class="btn btn-danger btn-sm" onclick="sil(${r.KonfigID})">Sil</button>
+  </td></tr>`).join('');
+}
+function filtrele(){const q=document.getElementById('arama').value.toLowerCase();render(data.filter(r=>r.KonfigAdi.toLowerCase().includes(q)))}
+function modalAc(){duz=null;document.getElementById('m-baslik').textContent='Yeni Konfigürasyon';document.getElementById('m-adi').value='';document.getElementById('m-alert').innerHTML='';document.getElementById('modal').classList.add('on');document.getElementById('m-adi').focus()}
+function duzenle(id,adi){duz=id;document.getElementById('m-baslik').textContent='Düzenle';document.getElementById('m-adi').value=adi;document.getElementById('m-alert').innerHTML='';document.getElementById('modal').classList.add('on')}
+function modalKapat(){document.getElementById('modal').classList.remove('on')}
+function kaydet(){
+  const adi=document.getElementById('m-adi').value.trim();
+  if(!adi){document.getElementById('m-alert').innerHTML='<div class="alert alert-err">Ad zorunludur.</div>';return}
+  const url=duz?`/api/konfig/${duz}`:'/api/konfig';
+  fetch(url,{method:duz?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({KonfigAdi:adi})}).then(()=>{modalKapat();yukle()});
+}
+function sil(id){if(!confirm('Sil?'))return;fetch(`/api/konfig/${id}`,{method:'DELETE'}).then(()=>yukle())}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')modalKapat()});
+yukle();
+</script>
+{% endblock %}

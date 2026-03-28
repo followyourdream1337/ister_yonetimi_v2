@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+{% block title %}İster Ağacı{% endblock %}
+{% block page_title %}İster Ağacı{% endblock %}
+{% block page_sub %}Görüntüleme & Şema{% endblock %}
+
+{% block extra_style %}
+<style>
+.agac-wrap{font-size:12px}
+.node-row{display:flex;align-items:center;padding:5px 8px;border-radius:5px;cursor:pointer;gap:6px;user-select:none}
+.node-row:hover{background:var(--bg3)}
+.node-row.secili{background:var(--accent-bg);border:1px solid var(--accent-border)}
+.node-row.baslik-row{font-weight:600}
+.node-indent{margin-left:20px;border-left:1px dashed var(--border2);padding-left:8px}
+.node-ico{width:16px;height:16px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;flex-shrink:0}
+.ico-b{background:#fef3c7;color:#92400e}
+.ico-g1{background:#dbeafe;color:#1d4ed8}
+.ico-g2{background:#dcfce7;color:#15803d}
+.ico-g3{background:#f3e8ff;color:#6d28d9}
+.nb{font-size:9px;font-weight:600;font-family:monospace;color:var(--accent2);background:var(--accent-bg);padding:1px 5px;border-radius:3px;border:1px solid var(--accent-border)}
+.kb-g{font-size:9px;font-weight:600;font-family:monospace;background:#dbeafe;color:#1d4ed8;padding:1px 5px;border-radius:3px;border:1px solid var(--accent-border)}
+.kb-b{font-size:9px;font-weight:600;font-family:monospace;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:3px;border:1px solid #fde68a}
+.node-label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Şema */
+.sema-wrap{display:flex;flex-direction:column;align-items:center;padding:20px;gap:0}
+.sema-node{border-radius:7px;padding:8px 14px;font-size:11px;font-weight:500;text-align:center;min-width:150px;max-width:230px;border:1.5px solid;word-break:break-word}
+.sema-aktif{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.sema-ust{background:var(--green-bg);border-color:var(--green-border);color:#15803d}
+.sema-alt{background:#f3e8ff;border-color:#ddd6fe;color:#6d28d9}
+.sema-ok{color:var(--text3);font-size:20px;line-height:1.3;text-align:center}
+.sema-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.flt-aktif{font-size:10px;background:var(--accent-bg);color:var(--accent);padding:2px 8px;border-radius:10px;border:1px solid var(--accent-border)}
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="display:flex;gap:7px;margin-bottom:12px;align-items:center;flex-wrap:wrap">
+  <select id="platform-sec" onchange="platformDegis()" style="width:160px">
+    <option value="">Platform seçin...</option>
+  </select>
+  <select id="f-baslik" onchange="renderAgac()" style="width:165px">
+    <option value="">Tüm Başlıklar</option>
+  </select>
+  <select id="f-seviye" onchange="renderAgac()" style="width:130px">
+    <option value="">Tüm Seviyeler</option>
+  </select>
+  <input id="f-numara" placeholder="İster No." style="width:120px" oninput="renderAgac()">
+  <input id="f-kod" placeholder="Havuz Kodu" style="width:130px" oninput="renderAgac()">
+  <input id="f-metin" placeholder="İçerik ara..." style="width:140px" oninput="renderAgac()">
+  <span id="f-aktif" class="flt-aktif" style="display:none"></span>
+  <button class="btn btn-ghost btn-sm" id="f-temizle" onclick="filtreleriTemizle()" style="display:none;color:var(--red)">✕ Temizle</button>
+</div>
+
+<div style="display:grid;grid-template-columns:400px 1fr;gap:10px;height:calc(100vh - 155px)">
+  <!-- Ağaç -->
+  <div style="overflow-y:auto;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px">
+    <div id="agac-icerik"><div class="empty">Platform seçin</div></div>
+  </div>
+  <!-- Şema -->
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;overflow-y:auto">
+    <div class="empty" id="sema-bos" style="margin-top:60px">Şema görmek için soldaki ağaçtan bir ister seçin</div>
+    <div id="sema-panel" style="display:none"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let nodes=[], seviyeler=[], seciliNID=null;
+
+fetch('/api/platform').then(r=>r.json()).then(d=>{
+  document.getElementById('platform-sec').innerHTML='<option value="">Platform seçin...</option>'+
+    d.map(p=>`<option value="${p.PlatformID}">${p.PlatformAdi}${p.HavuzMu?' (HAVUZ)':''}</option>`).join('');
+});
+
+function platformDegis(){
+  const pid=document.getElementById('platform-sec').value;
+  if(!pid){document.getElementById('agac-icerik').innerHTML='<div class="empty">Platform seçin</div>';return;}
+  fetch(`/api/platform/${pid}/seviye`).then(r=>r.json()).then(d=>{
+    seviyeler=d;
+    document.getElementById('f-seviye').innerHTML='<option value="">Tüm Seviyeler</option>'+
+      d.map(s=>`<option value="${s.SeviyeNo}">${s.SeviyeAdi}</option>`).join('');
+    fetch(`/api/platform/${pid}/ister_agaci`).then(r=>r.json()).then(nd=>{
+      nodes=nd;
+      const basliklar=nd.filter(n=>n.IsterTipi==='B');
+      document.getElementById('f-baslik').innerHTML='<option value="">Tüm Başlıklar</option>'+
+        basliklar.map(n=>`<option value="${n.NodeID}">${(n.Icerik||'').substring(0,45)}</option>`).join('');
+      renderAgac();
+    });
+  });
+}
+
+function gorNodlar(){
+  const bFlt=document.getElementById('f-baslik').value;
+  const sFlt=document.getElementById('f-seviye').value;
+  const nFlt=document.getElementById('f-numara').value.trim().toLowerCase();
+  const kFlt=document.getElementById('f-kod').value.trim().toLowerCase();
+  const mFlt=document.getElementById('f-metin').value.trim().toLowerCase();
+  let liste=nodes;
+  if(bFlt){
+    const bid=parseInt(bFlt);const tr=new Set();
+    const ekle=(id)=>{tr.add(id);nodes.filter(n=>n.ParentID===id).forEach(c=>ekle(c.NodeID));};
+    ekle(bid);liste=nodes.filter(n=>tr.has(n.NodeID));
+  }
+  if(sFlt)liste=liste.filter(n=>String(n.SeviyeNo)===sFlt);
+  if(nFlt||kFlt||mFlt){
+    const ids=new Set();
+    liste.forEach(n=>{
+      let ok=true;
+      if(nFlt&&!(n.NodeNumarasi||'').toLowerCase().includes(nFlt))ok=false;
+      if(kFlt&&!(n.HavuzKodu||'').toLowerCase().includes(kFlt))ok=false;
+      if(mFlt&&!(n.Icerik||'').toLowerCase().includes(mFlt))ok=false;
+      if(ok)ids.add(n.NodeID);
+    });
+    const ea=(nid)=>{const nd=nodes.find(n=>n.NodeID===nid);if(nd&&nd.ParentID&&!ids.has(nd.ParentID)){ids.add(nd.ParentID);ea(nd.ParentID);}};
+    ids.forEach(id=>ea(id));
+    liste=liste.filter(n=>ids.has(n.NodeID));
+  }
+  return liste;
+}
+
+function renderAgac(){
+  const liste=gorNodlar();
+  const aktif=[document.getElementById('f-baslik').value,document.getElementById('f-seviye').value,
+    document.getElementById('f-numara').value.trim(),document.getElementById('f-kod').value.trim(),
+    document.getElementById('f-metin').value.trim()].filter(Boolean);
+  const aktifEl=document.getElementById('f-aktif');
+  const temizEl=document.getElementById('f-temizle');
+  if(aktif.length){aktifEl.style.display='inline';aktifEl.textContent=`${aktif.length} filtre · ${liste.length} sonuç`;temizEl.style.display='inline-flex';}
+  else{aktifEl.style.display='none';temizEl.style.display='none';}
+  const listeIds=new Set(liste.map(n=>n.NodeID));
+  const roots=liste.filter(n=>!n.ParentID||!listeIds.has(n.ParentID));
+  const el=document.getElementById('agac-icerik');
+  if(!roots.length){el.innerHTML='<div class="empty">İster bulunamadı</div>';return;}
+  el.innerHTML=`<div class="agac-wrap">${roots.map(n=>renderNode(n,liste)).join('')}</div>`;
+}
+
+function filtreleriTemizle(){
+  ['f-baslik','f-seviye'].forEach(id=>document.getElementById(id).value='');
+  ['f-numara','f-kod','f-metin'].forEach(id=>document.getElementById(id).value='');
+  renderAgac();
+}
+
+function nodeIco(n){
+  if(n.IsterTipi==='B')return 'ico-b';
+  if(n.SeviyeNo===1)return 'ico-g1';
+  if(n.SeviyeNo===2)return 'ico-g2';
+  return 'ico-g3';
+}
+
+function renderNode(node,liste){
+  const children=liste.filter(n=>n.ParentID===node.NodeID);
+  const isSecili=seciliNID===node.NodeID;
+  const isBaslik=node.IsterTipi==='B';
+  return `<div>
+    <div class="node-row ${isSecili?'secili':''} ${isBaslik?'baslik-row':''}"
+      onclick="nodeSecSema(${node.NodeID})">
+      <div class="node-ico ${nodeIco(node)}">${isBaslik?'B':'G'}</div>
+      ${node.NodeNumarasi?`<span class="nb">${node.NodeNumarasi}</span>`:''}
+      ${node.HavuzKodu?`<span class="${isBaslik?'kb-b':'kb-g'}">${node.HavuzKodu}</span>`:''}
+      <div class="node-label" title="${node.Icerik||''}">${node.Icerik||'(boş)'}</div>
+      ${node.ta_id?`<span style="font-size:9px;background:var(--amber-bg);color:var(--amber);padding:1px 4px;border-radius:3px;border:1px solid var(--amber-border)">TA</span>`:''}
+    </div>
+    ${children.length?`<div class="node-indent">${children.map(c=>renderNode(c,liste)).join('')}</div>`:''}
+  </div>`;
+}
+
+function nodeSecSema(nid){
+  seciliNID=nid;
+  document.querySelectorAll('.node-row.secili').forEach(el=>el.classList.remove('secili'));
+  const row=document.querySelector(`#agac-icerik [onclick="nodeSecSema(${nid})"]`)?.closest('.node-row');
+  if(row)row.classList.add('secili');
+  const node=nodes.find(n=>n.NodeID===nid);
+  if(!node)return;
+  document.getElementById('sema-bos').style.display='none';
+  const sema=document.getElementById('sema-panel');
+  sema.style.display='block';
+
+  function ustHtml(n,dep=0){
+    if(!n.ParentID||dep>8)return '';
+    const p=nodes.find(x=>x.NodeID===n.ParentID);if(!p)return '';
+    return ustHtml(p,dep+1)+`<div class="sema-wrap" style="padding:0;gap:0">
+      <div class="sema-node sema-ust" style="opacity:${Math.max(0.3,1-dep*0.12)}">
+        ${p.NodeNumarasi?`<div style="font-size:9px;font-family:monospace;opacity:.7">${p.NodeNumarasi}</div>`:''}
+        ${p.HavuzKodu?`<div style="font-size:9px;opacity:.6">${p.HavuzKodu} · ${p.IsterTipi==='B'?'Başlık':'Gereksinim'}</div>`:''}
+        <div>${(p.Icerik||'').substring(0,50)}${(p.Icerik||'').length>50?'...':''}</div>
+      </div><div class="sema-ok">↓</div></div>`;
+  }
+
+  function altHtml(n,dep=0){
+    const ch=nodes.filter(x=>x.ParentID===n.NodeID);
+    if(!ch.length||dep>5)return '';
+    return `<div class="sema-ok">↓</div>
+      <div class="sema-row">${ch.map(c=>`<div class="sema-wrap" style="padding:0;gap:0">
+        <div class="sema-node sema-alt">
+          ${c.NodeNumarasi?`<div style="font-size:9px;font-family:monospace;opacity:.7">${c.NodeNumarasi}</div>`:''}
+          ${c.HavuzKodu?`<div style="font-size:9px;opacity:.6">${c.HavuzKodu}</div>`:''}
+          <div>${(c.Icerik||'').substring(0,40)}${(c.Icerik||'').length>40?'...':''}</div>
+        </div>${altHtml(c,dep+1)}</div>`).join('')}
+      </div>`;
+  }
+
+  sema.innerHTML=`<div class="sema-wrap">
+    ${ustHtml(node)}
+    <div class="sema-node sema-aktif">
+      ${node.NodeNumarasi?`<div style="font-size:9px;font-family:monospace;margin-bottom:2px">${node.NodeNumarasi}</div>`:''}
+      ${node.HavuzKodu?`<div style="font-size:10px;margin-bottom:3px">${node.HavuzKodu} · ${node.IsterTipi==='B'?'Başlık':'Gereksinim'}</div>`:''}
+      <div style="font-size:12px">${(node.Icerik||'').substring(0,60)}${(node.Icerik||'').length>60?'...':''}</div>
+    </div>${altHtml(node)}
+  </div>`;
+}
+</script>
+{% endblock %}

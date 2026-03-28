@@ -1,0 +1,291 @@
+{% extends "base.html" %}
+{% block title %}Değişiklik Logu{% endblock %}
+{% block page_title %}Değişiklik Logu{% endblock %}
+{% block page_sub %}Sistem{% endblock %}
+
+{% block content %}
+<style>
+  /* Tablo ve Taşma Ayarları */
+  .log-container { width: 100%; overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; table-layout: fixed; min-width: 1100px; }
+  
+  th, td { 
+    padding: 10px 8px; 
+    text-align: left; 
+    border-bottom: 1px solid #eee; 
+    vertical-align: middle;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Sütun Genişliklerini Sabitleme (Taşmayı Önler) */
+  th:nth-child(1), td:nth-child(1) { width: 125px; } /* Tarih */
+  th:nth-child(2), td:nth-child(2) { width: 100px; } /* Tablo */
+  th:nth-child(3), td:nth-child(3) { width: 55px;  } /* ID */
+  th:nth-child(4), td:nth-child(4) { width: 95px;  } /* Alan */
+  th:nth-child(7), td:nth-child(7) { width: 100px; } /* Kullanıcı */
+  th:nth-child(8), td:nth-child(8) { width: 90px;  } /* Tür */
+  th:nth-child(9), td:nth-child(9) { width: 130px; } /* Platform (Genişletildi) */
+  th:nth-child(10), td:nth-child(10) { width: 110px; } /* Seviye */
+  
+  th { background: #f8f9fa; position: sticky; top: 0; font-size: 11px; text-transform: uppercase; color: #666; z-index: 10; }
+  
+  .badge { 
+    padding: 4px 6px; 
+    border-radius: 4px; 
+    color: #fff; 
+    font-weight: 600; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    text-align: center;
+    line-height: 1;
+    min-height: 20px;
+  }
+  .b-blue { background: #007bff; font-size: 9px; text-transform: none; }
+  .text-truncate { font-size: 11px; }
+</style>
+
+<div class="card">
+  <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap">
+    <select id="f-tablo" onchange="filtrele()" style="flex:1; min-width:140px; font-size:12px">
+      <option value="">Tüm Tablolar</option>
+      <option>ister_node</option>
+      <option>ister_tablo</option>
+      <option>ister_bullet</option>
+      <option>ister_onay</option>
+      <option>test_sonuc</option>
+      <option>ta_dokuman</option>
+      <option>konfig_list</option>
+      <option>platform_list</option>
+      <option>kullanici</option>
+    </select>
+    <input id="f-kul" placeholder="Kullanıcı..." oninput="filtrele()" style="flex:1; min-width:140px">
+    <input id="f-alan" placeholder="Alan..." oninput="filtrele()" style="flex:1; min-width:140px">
+    <select id="f-tur" onchange="filtrele()" style="flex:1; min-width:130px; font-weight:500;">
+      <option value="">Tüm Türler</option>
+      <option value="{{ LogTur.CREATE.value }}">{{ LogTur.CREATE.value }}</option>
+      <option value="{{ LogTur.UPDATE.value }}">{{ LogTur.UPDATE.value }}</option>
+      <option value="{{ LogTur.DELETE.value }}">{{ LogTur.DELETE.value }}</option>
+    </select>
+    <select id="f-platform" onchange="platformDegis()" style="flex:1; min-width:140px; font-size:12px">
+      <option value="">Tüm Platformlar</option>
+    </select>
+    <select id="f-baslik" onchange="filtrele()" style="flex:1; min-width:160px; font-size:12px">
+      <option value="">Tüm Başlıklar</option>
+    </select>
+    <select id="f-seviye" onchange="filtrele()" style="flex:1; min-width:130px; font-size:12px">
+      <option value="">Tüm Seviyeler</option>
+    </select>
+    <button onclick="filtreleriTemizle()" style="flex:none; padding:6px 12px; border-radius:6px; border:1px solid #dc3545; background:transparent; color:#dc3545; font-size:12px; cursor:pointer">✕ Temizle</button>
+  </div>
+
+  <div class="log-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Tarih</th>
+          <th>Tablo</th>
+          <th>ID</th>
+          <th>Alan</th>
+          <th>Eski Değer</th>
+          <th>Yeni Değer</th>
+          <th>Kullanıcı</th>
+          <th>Tür</th>
+          <th>Platform</th>
+          <th>Seviye</th>
+          <th>Başlık</th>
+        </tr>
+      </thead>
+      <tbody id="tablo"></tbody>
+    </table>
+  </div>
+  <div id="loading" style="text-align:center; padding:20px; color:#999">Veriler Hazırlanıyor...</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let data = [];
+let tumNodes = [];
+let nodeMap = {};
+let seviyeMap = {};
+let platformMap = {};
+let bulletNodeMap = {}; 
+let tabloNodeMap = {};
+
+// Sayfa yükleme işlemleri
+Promise.all([
+  fetch('/api/log').then(r => r.json()),
+  fetch('/api/platform').then(r => r.json()),
+  fetch('/api/platform').then(r => r.json()).then(plats => {
+      return Promise.all(plats.map(p => fetch(`/api/platform/${p.PlatformID}/ister_agaci`).then(r => r.json())));
+  }),
+  fetch('/api/ister_bullet/hepsi').catch(()=>({json:()=>[]})).then(r => r.json ? r.json() : []),
+  fetch('/api/ister_tablo/hepsi').catch(()=>({json:()=>[]})).then(r => r.json ? r.json() : [])
+]).then(([logData, platformData, allNodesArrays, bulletData, tabloData]) => {
+  
+  data = logData;
+  tumNodes = allNodesArrays.flat();
+  
+  tumNodes.forEach(n => { nodeMap[n.NodeID] = n; });
+  if(Array.isArray(bulletData)) bulletData.forEach(b => { bulletNodeMap[b.BulletID] = b.NodeID; });
+  if(Array.isArray(tabloData)) tabloData.forEach(t => { tabloNodeMap[t.TabloID] = t.NodeID; });
+  
+  platformData.forEach(p => platformMap[p.PlatformID] = p.PlatformAdi);
+
+  const pSel = document.getElementById('f-platform');
+  platformData.forEach(p => {
+    const o = document.createElement('option');
+    o.value = p.PlatformID;
+    o.textContent = p.PlatformAdi;
+    pSel.appendChild(o);
+  });
+
+  basliklarıDoldur(tumNodes);
+  seviyeleriDoldur(tumNodes);
+
+  document.getElementById('loading').style.display = 'none';
+  filtrele();
+}).catch(err => {
+  console.error("Yükleme hatası:", err);
+  document.getElementById('loading').innerHTML = "Veri yüklenirken bir hata oluştu.";
+});
+
+function ilgiliNodeBul(r) {
+  const kid = parseInt(r.KayitID);
+  const t = r.TabloAdi;
+  if (t === 'ister_node') return nodeMap[kid] || null;
+  if (t === 'ister_bullet') return nodeMap[bulletNodeMap[kid]] || null;
+  if (t === 'ister_tablo' || t === 'ister_onay') return nodeMap[tabloNodeMap[kid]] || null;
+  return null;
+}
+
+function ustBasligiBul(nd) {
+  if (!nd) return null;
+  if (nd.IsterTipi === 'B') return nd;
+  let curr = nd;
+  let safety = 0;
+  while (curr.ParentID && safety < 15) {
+    let parent = nodeMap[curr.ParentID];
+    if (!parent) break;
+    if (parent.IsterTipi === 'B') return parent;
+    curr = parent;
+    safety++;
+  }
+  return null;
+}
+
+function basliklarıDoldur(kaynak) {
+  const bSel = document.getElementById('f-baslik');
+  bSel.innerHTML = '<option value="">Tüm Başlıklar</option>';
+  kaynak.filter(n => n.IsterTipi === 'B').forEach(n => {
+    const o = document.createElement('option');
+    o.value = n.NodeID;
+    o.textContent = `[${platformMap[n.PlatformID] || '?'}] ${n.Icerik.substring(0,40)}`;
+    bSel.appendChild(o);
+  });
+}
+
+function seviyeleriDoldur(kaynak) {
+  const sSel = document.getElementById('f-seviye');
+  sSel.innerHTML = '<option value="">Tüm Seviyeler</option>';
+  const set = new Set();
+  kaynak.forEach(n => {
+    if (n.SeviyeNo && !set.has(n.SeviyeNo)) {
+      set.add(n.SeviyeNo);
+      seviyeMap[n.SeviyeNo] = n.SeviyeAdi;
+      const o = document.createElement('option');
+      o.value = n.SeviyeNo;
+      o.textContent = n.SeviyeAdi || `Seviye ${n.SeviyeNo}`;
+      sSel.appendChild(o);
+    }
+  });
+}
+
+function platformDegis() {
+  const pid = document.getElementById('f-platform').value;
+  const filteredNodes = pid ? tumNodes.filter(n => String(n.PlatformID) === String(pid)) : tumNodes;
+  basliklarıDoldur(filteredNodes);
+  seviyeleriDoldur(filteredNodes);
+  filtrele();
+}
+
+function filtrele() {
+  const f = {
+    t: document.getElementById('f-tablo').value.toLowerCase(),
+    k: document.getElementById('f-kul').value.toLowerCase(),
+    a: document.getElementById('f-alan').value.toLowerCase(),
+    tur: document.getElementById('f-tur').value,
+    pid: document.getElementById('f-platform').value,
+    bid: document.getElementById('f-baslik').value,
+    sv: document.getElementById('f-seviye').value
+  };
+
+  const list = data.filter(r => {
+    if (f.t && !(r.TabloAdi || '').toLowerCase().includes(f.t)) return false;
+    if (f.k && !(r.KullaniciAdi || '').toLowerCase().includes(f.k)) return false;
+    if (f.a && !(r.AlanAdi || '').toLowerCase().includes(f.a)) return false;
+    if (f.tur && r.Tur !== f.tur) return false;
+
+    if (f.pid || f.bid || f.sv) {
+      const nd = ilgiliNodeBul(r);
+      if (!nd) return false;
+      if (f.pid && String(nd.PlatformID) !== String(f.pid)) return false;
+      if (f.sv && String(nd.SeviyeNo) !== String(f.sv)) return false;
+      if (f.bid) {
+          let ust = ustBasligiBul(nd);
+          if (!ust || String(ust.NodeID) !== String(f.bid)) return false;
+      }
+    }
+    return true;
+  });
+
+  const tb = document.getElementById('tablo');
+  tb.innerHTML = list.map(r => {
+    const nd = ilgiliNodeBul(r);
+    const isSilme = (r.Tur || '').includes('Silme');
+    const isterTablosuMu = ['ister_node','ister_bullet','ister_tablo','ister_onay'].includes(r.TabloAdi);
+    
+    // Platform Hücresi
+    let pDisp = '—';
+    if (nd) {
+        pDisp = platformMap[nd.PlatformID] || 'HAVUZ';
+    } else if (isterTablosuMu) {
+        pDisp = isSilme ? '<span style="color:#dc3545; font-weight:700;">Silinmiş</span>' : '<span style="color:#999; font-style:italic;" title="ID artık mevcut değil">Arşiv</span>';
+    }
+
+    const sDisp = nd ? (nd.SeviyeAdi || seviyeMap[nd.SeviyeNo] || '—') : '—';
+    const ust = nd ? ustBasligiBul(nd) : null;
+    const bDisp = ust ? (ust.Icerik || '').substring(0, 35) : '—';
+
+    let turBg = r.Tur === 'Ekleme' ? '#28a745' : r.Tur === 'Silme' ? '#dc3545' : '#ffc107';
+    let turColor = r.Tur === 'Güncelleme' ? '#333' : '#fff';
+
+    return `<tr>
+      <td style="font-size:10px;">${r.DegisimTarihi}</td>
+      <td><span class="badge b-blue" style="width:100%">${r.TabloAdi}</span></td>
+      <td style="font-family:monospace; font-size:10px;">${r.KayitID}</td>
+      <td style="font-size:11px;">${r.AlanAdi || ''}</td>
+      <td class="text-truncate" style="color:#d93025" title="${r.EskiDeger}">${r.EskiDeger || '—'}</td>
+      <td class="text-truncate" style="color:#188038" title="${r.YeniDeger}">${r.YeniDeger || '—'}</td>
+      <td style="font-size:11px;">${r.KullaniciAdi}</td>
+      <td>
+        <span class="badge" style="background:${turBg}; color:${turColor}; font-size:9px; width:100%;">
+          ${r.Tur}
+        </span>
+      </td>
+      <td style="font-size:11px; font-weight:500;">${pDisp}</td>
+      <td style="font-size:11px; color:#666;">${sDisp}</td>
+      <td class="text-truncate" style="font-size:11px; color:#666;" title="${bDisp}">${bDisp}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="11" style="text-align:center; padding:20px;">Kayıt bulunamadı.</td></tr>';
+}
+
+function filtreleriTemizle() {
+  document.querySelectorAll('.card select, .card input').forEach(el => el.value = '');
+  platformDegis();
+}
+</script>
+{% endblock %}

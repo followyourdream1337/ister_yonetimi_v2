@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Kullanıcılar{% endblock %}
+{% block page_title %}Kullanıcılar{% endblock %}
+{% block page_sub %}Sistem{% endblock %}
+{% block topbar_actions %}<button class="btn btn-primary" onclick="modalAc()">+ Yeni Kullanıcı</button>{% endblock %}
+{% block content %}
+<div class="card">
+  <table><thead><tr><th>#</th><th>Kullanıcı Adı</th><th>Ad Soyad</th><th>Durum</th><th style="width:120px">İşlem</th></tr></thead>
+  <tbody id="tablo"></tbody></table>
+</div>
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <div class="modal-hd"><div class="modal-title" id="m-baslik">Yeni Kullanıcı</div><span class="modal-close" onclick="modalKapat()">✕</span></div>
+    <div id="m-alert"></div>
+    <div class="fg"><label class="fl">Kullanıcı Adı *</label><input type="text" id="m-kadi" autocomplete="off"></div>
+    <div class="fg"><label class="fl">Ad Soyad</label><input type="text" id="m-adsoyad"></div>
+    <div class="fg"><label class="fl" id="m-sifre-label">Şifre *</label><input type="password" id="m-sifre" autocomplete="new-password"></div>
+    <div class="fg"><label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="m-aktif" checked style="width:auto"> Aktif</label></div>
+    <div class="modal-ft"><button class="btn btn-ghost" onclick="modalKapat()">İptal</button><button class="btn btn-primary" onclick="kaydet()">Kaydet</button></div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let data=[],duz=null;
+const benimId={{ session.kullanici_id }};
+function yukle(){fetch('/api/kullanici').then(r=>r.json()).then(d=>{data=d;render()})}
+function render(){
+  document.getElementById('tablo').innerHTML=data.map(r=>`<tr>
+    <td style="font-family:monospace;font-size:10px;color:var(--text3)">${r.KullaniciID}</td>
+    <td style="font-weight:500">${r.KullaniciAdi}${r.KullaniciID===benimId?' <span class="badge b-blue">Ben</span>':''}</td>
+    <td>${r.AdSoyad||'—'}</td>
+    <td>${r.AktifMi?'<span class="badge b-green">Aktif</span>':'<span class="badge b-red">Pasif</span>'}</td>
+    <td>
+      <button class="btn btn-ghost btn-sm" onclick="duzenle(${r.KullaniciID})">Düzenle</button>
+      ${r.KullaniciID!==benimId?`<button class="btn btn-danger btn-sm" onclick="sil(${r.KullaniciID})">Sil</button>`:''}
+    </td>
+  </tr>`).join('');
+}
+function modalAc(){duz=null;document.getElementById('m-baslik').textContent='Yeni Kullanıcı';['m-kadi','m-adsoyad','m-sifre'].forEach(id=>document.getElementById(id).value='');document.getElementById('m-aktif').checked=true;document.getElementById('m-sifre-label').textContent='Şifre *';document.getElementById('m-alert').innerHTML='';document.getElementById('modal').classList.add('on');document.getElementById('m-kadi').focus()}
+function duzenle(id){
+  const k=data.find(r=>r.KullaniciID===id);duz=id;
+  document.getElementById('m-baslik').textContent='Kullanıcı Düzenle';
+  document.getElementById('m-kadi').value=k.KullaniciAdi;document.getElementById('m-adsoyad').value=k.AdSoyad||'';
+  document.getElementById('m-sifre').value='';document.getElementById('m-aktif').checked=!!k.AktifMi;
+  document.getElementById('m-sifre-label').textContent='Yeni Şifre (boşsa değişmez)';
+  document.getElementById('m-alert').innerHTML='';document.getElementById('modal').classList.add('on');
+}
+function modalKapat(){document.getElementById('modal').classList.remove('on')}
+function kaydet(){
+  const body={KullaniciAdi:document.getElementById('m-kadi').value.trim(),AdSoyad:document.getElementById('m-adsoyad').value.trim(),Sifre:document.getElementById('m-sifre').value,AktifMi:document.getElementById('m-aktif').checked?1:0};
+  if(!body.KullaniciAdi){document.getElementById('m-alert').innerHTML='<div class="alert alert-err">Kullanıcı adı zorunludur.</div>';return}
+  if(!duz&&!body.Sifre){document.getElementById('m-alert').innerHTML='<div class="alert alert-err">Şifre zorunludur.</div>';return}
+  fetch(duz?`/api/kullanici/${duz}`:'/api/kullanici',{method:duz?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+    .then(r=>r.json()).then(d=>{if(d.hata){document.getElementById('m-alert').innerHTML=`<div class="alert alert-err">${d.hata}</div>`;return}modalKapat();yukle()});
+}
+function sil(id){if(!confirm('Sil?'))return;fetch(`/api/kullanici/${id}`,{method:'DELETE'}).then(r=>r.json()).then(d=>{if(d.hata)alert(d.hata);else yukle()})}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')modalKapat()});
+yukle();
+</script>
+{% endblock %}

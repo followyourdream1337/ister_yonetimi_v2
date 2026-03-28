@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block page_sub %}Genel Durum{% endblock %}
+{% block topbar_actions %}
+<button class="btn btn-ghost btn-sm" onclick="printDashboard()">⎙ PDF</button>
+{% endblock %}
+
+{% block extra_style %}
+<style>
+.sc{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px}
+.sc-label{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.sc-val{font-size:28px;font-weight:700}
+.pbar{height:6px;background:var(--bg4);border-radius:3px;overflow:hidden;margin-top:8px}
+.pbar-f{height:100%;border-radius:3px;transition:width .4s}
+.plat-kart{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px;cursor:pointer;transition:border-color .15s}
+.plat-kart:hover{border-color:var(--accent)}
+.durum-bant{display:flex;height:8px;border-radius:4px;overflow:hidden;gap:1px;margin:6px 0}
+.legend-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;display:inline-block}
+.onay-kart{border-radius:8px;padding:12px;display:flex;align-items:center;gap:12px}
+.onay-sayi{font-size:32px;font-weight:700;line-height:1}
+canvas{max-height:200px}
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Üst istatistikler -->
+<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:18px" id="stat-grid">
+  <div class="sc"><div class="sc-label">Platform</div><div class="sc-val" id="s-plat">—</div></div>
+  <div class="sc"><div class="sc-label">Toplam İster</div><div class="sc-val" id="s-ister">—</div></div>
+  <div class="sc"><div class="sc-label">✓ Onaylı</div><div class="sc-val" style="color:var(--green)" id="s-onay">—</div><div class="pbar"><div class="pbar-f" style="background:var(--green)" id="s-onay-bar"></div></div></div>
+  <div class="sc"><div class="sc-label">⚠ Görüş Var</div><div class="sc-val" style="color:#eab308" id="s-gorus">—</div><div class="pbar"><div class="pbar-f" style="background:#eab308" id="s-gorus-bar"></div></div></div>
+  <div class="sc"><div class="sc-label">○ Belirsiz</div><div class="sc-val" style="color:var(--text3)" id="s-belirsiz">—</div><div class="pbar"><div class="pbar-f" style="background:var(--border2)" id="s-belirsiz-bar"></div></div></div>
+</div>
+
+<!-- Platform filtresi + grafikler -->
+<div style="display:grid;grid-template-columns:1fr 280px;gap:14px;margin-bottom:18px">
+  <!-- Sol: Platform durumları -->
+  <div class="card">
+    <div class="card-hd">
+      <div class="card-title">Platform İster Durumları</div>
+      <select id="plat-filtre" onchange="filtrelePlatform()" style="width:160px">
+        <option value="">Tüm Platformlar</option>
+      </select>
+    </div>
+    <div id="platform-listesi"></div>
+  </div>
+  <!-- Sağ: Pasta grafik -->
+  <div class="card" style="display:flex;flex-direction:column;align-items:center">
+    <div class="card-title" style="margin-bottom:12px;align-self:flex-start">Onay Dağılımı</div>
+    <canvas id="onay-pie"></canvas>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-top:12px;width:100%;font-size:12px" id="pie-legend"></div>
+  </div>
+</div>
+
+<!-- Alt satır: Firma görüşleri + test durumu -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+  <!-- Firma görüşleri özeti -->
+  <div class="card">
+    <div class="card-hd">
+      <div class="card-title">Son Firma Görüşleri</div>
+      <a href="/raporlar" style="font-size:11px;color:var(--accent);text-decoration:none">Tümünü Gör →</a>
+    </div>
+    <div id="son-gorusler"></div>
+  </div>
+  <!-- Test durumu -->
+  <div class="card">
+    <div class="card-hd">
+      <div class="card-title">Test Sonuç Durumu</div>
+      <a href="/test_girisi" style="font-size:11px;color:var(--accent);text-decoration:none">Test Girişi →</a>
+    </div>
+    <div id="test-durum"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+let tumOnayData=[], tumPlatformlar=[], piChart=null;
+
+// Verileri yükle
+Promise.all([
+  fetch('/api/rapor/onay_durumu').then(r=>r.json()),
+  fetch('/api/platform').then(r=>r.json()),
+  fetch('/api/rapor/firma_gorusleri').then(r=>r.json()),
+  fetch('/api/dashboard').then(r=>r.json())
+]).then(([onayData,platformlar,gorusler,dash])=>{
+  tumOnayData=onayData;
+  tumPlatformlar=platformlar.filter(p=>!p.HavuzMu);
+
+  // Platform dropdown
+  const sel=document.getElementById('plat-filtre');
+  tumPlatformlar.forEach(p=>{
+    const o=document.createElement('option');o.value=p.PlatformID;o.textContent=p.PlatformAdi;sel.appendChild(o);
+  });
+
+  // Üst istatistikler
+  document.getElementById('s-plat').textContent=tumPlatformlar.length;
+  guncelleStat(onayData);
+
+  // Platform listesi
+  renderPlatformlar(onayData);
+
+  // Pasta grafik
+  renderPie(onayData);
+
+  // Dashboard
+  if(dash.platformlar){
+    renderTestDurum(dash.platformlar);
+  }
+
+  // Son görüşler
+  renderGorusler(gorusler.slice(0,8));
+});
+
+function guncelleStat(data){
+  const toplam=data.length;
+  const onay=data.filter(r=>r.OnayDurumu).length;
+  const gorus=data.filter(r=>!r.OnayDurumu&&r.GorusSayisi>0).length;
+  const belirsiz=data.filter(r=>!r.OnayDurumu&&!r.GorusSayisi).length;
+  document.getElementById('s-ister').textContent=toplam;
+  document.getElementById('s-onay').textContent=onay;
+  document.getElementById('s-gorus').textContent=gorus;
+  document.getElementById('s-belirsiz').textContent=belirsiz;
+  if(toplam){
+    document.getElementById('s-onay-bar').style.width=(onay/toplam*100)+'%';
+    document.getElementById('s-gorus-bar').style.width=(gorus/toplam*100)+'%';
+    document.getElementById('s-belirsiz-bar').style.width=(belirsiz/toplam*100)+'%';
+  }
+}
+
+function renderPlatformlar(data){
+  const el=document.getElementById('platform-listesi');
+  if(!tumPlatformlar.length){el.innerHTML='<div class="empty">Platform bulunamadı</div>';return}
+  el.innerHTML=tumPlatformlar.map(p=>{
+    const pd=data.filter(r=>r.PlatformID===p.PlatformID||r.PlatformAdi===p.PlatformAdi);
+    const toplam=pd.length;
+    const onay=pd.filter(r=>r.OnayDurumu).length;
+    const gorus=pd.filter(r=>!r.OnayDurumu&&r.GorusSayisi>0).length;
+    const belirsiz=pd.filter(r=>!r.OnayDurumu&&!r.GorusSayisi).length;
+    const onayPct=toplam?Math.round(onay/toplam*100):0;
+    return `<div class="plat-kart" style="margin-bottom:8px" onclick="window.location='/platform_ister'">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+        <div style="font-weight:500;font-size:13px">${p.PlatformAdi}</div>
+        <div style="font-size:11px;color:var(--text3)">${toplam} ister</div>
+      </div>
+      <div class="durum-bant">
+        <div style="flex:${onay||0.01};background:#16a34a" title="${onay} onaylı"></div>
+        <div style="flex:${gorus||0.01};background:#eab308" title="${gorus} görüş var"></div>
+        <div style="flex:${belirsiz||0.01};background:var(--border2)" title="${belirsiz} belirsiz"></div>
+      </div>
+      <div style="display:flex;gap:12px;font-size:11px">
+        <span><span class="legend-dot" style="background:#16a34a"></span> ${onay} onaylı</span>
+        <span><span class="legend-dot" style="background:#eab308"></span> ${gorus} görüş</span>
+        <span><span class="legend-dot" style="background:var(--border2)"></span> ${belirsiz} belirsiz</span>
+        <span style="margin-left:auto;font-weight:600;color:${onayPct>=70?'var(--green)':onayPct>=40?'#eab308':'var(--red)'}">%${onayPct} onaylı</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderPie(data){
+  const onay=data.filter(r=>r.OnayDurumu).length;
+  const gorus=data.filter(r=>!r.OnayDurumu&&r.GorusSayisi>0).length;
+  const belirsiz=data.filter(r=>!r.OnayDurumu&&!r.GorusSayisi).length;
+  if(piChart)piChart.destroy();
+  piChart=new Chart(document.getElementById('onay-pie'),{
+    type:'doughnut',
+    data:{
+      labels:['Onaylı','Görüş Var','Belirsiz'],
+      datasets:[{data:[onay,gorus,belirsiz],backgroundColor:['#16a34a','#eab308','#94a3b8'],borderWidth:2,borderColor:'#fff'}]
+    },
+    options:{responsive:true,plugins:{legend:{display:false}}}
+  });
+  document.getElementById('pie-legend').innerHTML=
+    [['#16a34a','Onaylı ✓',onay],['#eab308','Görüş Var ⚠',gorus],['#94a3b8','Belirsiz ○',belirsiz]]
+    .map(([c,l,v])=>`<div style="display:flex;justify-content:space-between;align-items:center">
+      <span style="display:flex;align-items:center;gap:6px"><span class="legend-dot" style="background:${c}"></span>${l}</span>
+      <b>${v}</b>
+    </div>`).join('');
+}
+
+function filtrelePlatform(){
+  const pid=parseInt(document.getElementById('plat-filtre').value)||null;
+  if(!pid){renderPlatformlar(tumOnayData);renderPie(tumOnayData);guncelleStat(tumOnayData);return}
+  fetch(`/api/rapor/onay_durumu?platform_id=${pid}`).then(r=>r.json()).then(data=>{
+    guncelleStat(data);
+    renderPie(data);
+    const platEk=tumPlatformlar.find(p=>p.PlatformID===pid);
+    document.getElementById('platform-listesi').innerHTML=platEk?`
+      <div style="font-size:12px;font-weight:500;margin-bottom:10px">${platEk.PlatformAdi} — ${data.length} ister</div>`:'';
+    // Detay tablo
+    const onay=data.filter(r=>r.OnayDurumu).length;
+    const gorus=data.filter(r=>!r.OnayDurumu&&r.GorusSayisi>0).length;
+    const belirsiz=data.filter(r=>!r.OnayDurumu&&!r.GorusSayisi).length;
+    document.getElementById('platform-listesi').innerHTML+=`
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+        <div class="onay-kart" style="background:#dcfce7;border:1px solid #16a34a">
+          <div class="onay-sayi" style="color:#16a34a">${onay}</div>
+          <div style="font-size:11px;color:#15803d">✓ Onaylı İster</div>
+        </div>
+        <div class="onay-kart" style="background:#fef9c3;border:1px solid #eab308">
+          <div class="onay-sayi" style="color:#ca8a04">${gorus}</div>
+          <div style="font-size:11px;color:#92400e">⚠ Görüş Var</div>
+        </div>
+        <div class="onay-kart" style="background:var(--bg3);border:1px solid var(--border2)">
+          <div class="onay-sayi" style="color:var(--text3)">${belirsiz}</div>
+          <div style="font-size:11px;color:var(--text2)">○ Belirsiz</div>
+        </div>
+      </div>`;
+  });
+}
+
+function renderGorusler(list){
+  const el=document.getElementById('son-gorusler');
+  if(!list.length){el.innerHTML='<div class="empty">Henüz firma görüşü girilmemiş</div>';return}
+  const renkler=['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6'];
+  el.innerHTML=list.map((g,i)=>`
+    <div style="display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">
+      <div style="width:6px;height:6px;border-radius:50%;background:${renkler[i%renkler.length]};margin-top:5px;flex-shrink:0"></div>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:12px;font-weight:500">${g.FirmaAdi}</span>
+          <span class="badge b-blue" style="font-size:9px">${g.PlatformAdi}</span>
+        </div>
+        <div style="font-size:11px;color:var(--text2);margin-top:2px">${g.GorusKategori||g.GorusOzet||g.NodeIcerik||''}</div>
+        <div style="font-size:10px;color:var(--text3)">${g.OlusturmaTarihi}</div>
+      </div>
+    </div>`).join('');
+}
+
+function renderTestDurum(platformlar){
+  const el=document.getElementById('test-durum');
+  if(!platformlar.length){el.innerHTML='<div class="empty">Test verisi yok</div>';return}
+  el.innerHTML=platformlar.map(p=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)">
+      <span style="font-size:12px;font-weight:500">${p.PlatformAdi}</span>
+      <div style="display:flex;gap:8px;font-size:11px">
+        <span style="color:var(--green)">✓ ${p.BasariliTest||0}</span>
+        <span style="color:var(--red)">✗ ${p.HataliTest||0}</span>
+        <span style="color:var(--text3)">— ${p.ToplamTest-(p.BasariliTest||0)-(p.HataliTest||0)}</span>
+        <span style="font-weight:600;color:${(p.BasariOrani||0)>=70?'var(--green)':(p.BasariOrani||0)>=40?'var(--amber)':'var(--red)'}">%${p.BasariOrani||0}</span>
+      </div>
+    </div>`).join('');
+}
+
+function printDashboard(){
+  fetch('/api/export/dashboard').then(r=>r.json()).then(d=>{
+    const w=window.open('','_blank');
+    w.document.write(`<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><title>Dashboard</title>
+    <style>body{font-family:'Segoe UI',sans-serif;font-size:12px;padding:20px;max-width:900px;margin:0 auto}
+    h1{font-size:18px;margin-bottom:4px}.sub{color:#8fa0b8;font-size:11px;margin-bottom:20px}
+    .g{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}
+    .c{border:1px solid #dde3ec;border-radius:8px;padding:12px}.cl{font-size:9px;color:#8fa0b8;text-transform:uppercase}
+    .cv{font-size:22px;font-weight:600}
+    @media print{button{display:none}}</style></head><body>
+    <h1>Dashboard Raporu</h1>
+    <div class="sub">${new Date().toLocaleDateString('tr-TR',{day:'2-digit',month:'long',year:'numeric'})}</div>
+    <button onclick="window.print()" style="margin-bottom:16px;padding:6px 14px;background:#2563eb;color:#fff;border:none;border-radius:5px;cursor:pointer">Yazdır / PDF</button>
+    <div class="g">
+      <div class="c"><div class="cl">Platform</div><div class="cv">${d.platform_sayisi||0}</div></div>
+      <div class="c"><div class="cl">Başarı</div><div class="cv" style="color:#16a34a">%${d.basari_orani||0}</div></div>
+      <div class="c"><div class="cl">Hatalı</div><div class="cv" style="color:#dc2626">${d.hatali_test||0}</div></div>
+      <div class="c"><div class="cl">Toplam TGD</div><div class="cv">${d.tgd_toplam||0}</div></div>
+    </div>
+    ${(d.platformlar||[]).map(p=>`<div class="c" style="margin-bottom:8px">
+      <b>${p.PlatformAdi}</b> — ${p.ToplamTest} test · %${p.BasariOrani} başarı
+    </div>`).join('')}
+    </body></html>`);
+    w.document.close();
+  });
+}
+</script>
+{% endblock %}

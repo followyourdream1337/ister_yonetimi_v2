@@ -1,0 +1,391 @@
+{% extends "base.html" %}
+{% block title %}Karşılaştırma{% endblock %}
+{% block page_title %}Karşılaştırma{% endblock %}
+{% block page_sub %}İster Yönetimi{% endblock %}
+
+{% block extra_style %}
+<style>
+.kar-ayni{background:rgba(22,163,74,.1)!important}
+.kar-benzer{background:rgba(217,119,6,.08)!important}
+.kar-yeni{background:rgba(37,99,235,.08)!important}
+.kar-fazla{background:rgba(220,38,38,.1)!important}
+.db-ayni{background:rgba(22,163,74,.15);color:#15803d;padding:2px 8px;border-radius:4px;font-size:10px}
+.db-benzer{background:rgba(217,119,6,.15);color:#92400e;padding:2px 8px;border-radius:4px;font-size:10px}
+.db-yeni{background:rgba(37,99,235,.15);color:#1d4ed8;padding:2px 8px;border-radius:4px;font-size:10px}
+.db-fazla{background:rgba(220,38,38,.15);color:#991b1b;padding:2px 8px;border-radius:4px;font-size:10px}
+.mode-btn{padding:7px 18px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid var(--border2);background:transparent;color:var(--text2)}
+.mode-btn.on{background:var(--accent);color:#fff;border-color:var(--accent2)}
+.editable-cell{border:none;background:transparent;width:100%;font-size:11px;padding:2px 4px;outline:none;border-bottom:1px dashed transparent}
+.editable-cell:focus{border-bottom-color:var(--accent);background:var(--accent-bg)}
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="display:flex;gap:8px;margin-bottom:18px">
+  <button class="mode-btn on" id="btn-dis" onclick="modSec('dis')">Dış Liste ile Karşılaştır</button>
+  <button class="mode-btn" id="btn-havuz" onclick="modSec('havuz')">Havuz ile Karşılaştır</button>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">
+  <div class="card">
+    <div class="card-hd"><div class="card-title">Ayarlar</div></div>
+    <div class="fg"><label class="fl">Platform</label>
+      <select id="platform-sec" onchange="platformDegis()"></select>
+    </div>
+    <div class="fg"><label class="fl">Karşılaştırılacak Seviye</label>
+      <select id="seviye-sec"><option value="2">SGÖ (Seviye 2)</option></select>
+    </div>
+    <div class="fg"><label class="fl">GIGN Numarası Başlığı (opsiyonel)</label>
+      <select id="gign-baslik-sec">
+        <option value="">Tüm İsterler</option>
+      </select>
+    </div>
+    <div class="fg"><label class="fl">Benzerlik Eşiği (%)</label>
+      <input type="number" id="esik" value="80" min="1" max="100" style="width:100px">
+    </div>
+    <button class="btn btn-primary" onclick="karsilastir()">Karşılaştır</button>
+  </div>
+
+  <div class="card" id="dis-panel">
+    <div class="card-hd">
+      <div class="card-title">Dış Liste</div>
+      <label class="btn btn-ghost btn-sm" style="cursor:pointer">
+        📎 Dosya Yükle
+        <input type="file" id="dosya-input" accept=".txt,.csv,.xlsx,.xls,.docx,.doc" style="display:none" onchange="dosyaYukle(this)">
+      </label>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Her satıra bir ister yazın veya txt/csv/xlsx dosyası yükleyin</div>
+    <textarea id="dis-liste" rows="8" placeholder="İster 1&#10;İster 2&#10;İster 3"></textarea>
+  </div>
+
+  <div class="card" id="havuz-panel" style="display:none">
+    <div class="card-hd"><div class="card-title">Havuz ile Karşılaştırma</div></div>
+    <div style="font-size:12px;color:var(--text2);line-height:1.8">
+      <p>Seçili platformun isterlerini HAVUZ platformundaki isterlerle karşılaştırır.</p><br>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div><span class="db-ayni">Aynı</span> &nbsp; Birebir eşleşen</div>
+        <div><span class="db-benzer">Benzer</span> &nbsp; Eşiğin üzerinde benzer</div>
+        <div><span class="db-yeni">Farklı</span> &nbsp; Platformda var, havuzda benzeri yok</div>
+        <div><span class="db-fazla">Havuzda Fazla</span> &nbsp; Havuzda var, platformda benzeri yok</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="sonuc-ozet" style="display:none;margin-bottom:16px">
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+    <div class="card" style="text-align:center"><div style="font-size:10px;color:var(--text3);margin-bottom:4px;text-transform:uppercase">Aynı</div><div style="font-size:24px;font-weight:600;color:var(--green)" id="s-ayni">0</div></div>
+    <div class="card" style="text-align:center"><div style="font-size:10px;color:var(--text3);margin-bottom:4px;text-transform:uppercase">Benzer</div><div style="font-size:24px;font-weight:600;color:var(--amber)" id="s-benzer">0</div></div>
+    <div class="card" style="text-align:center"><div style="font-size:10px;color:var(--text3);margin-bottom:4px;text-transform:uppercase" id="s3-label">Yeni</div><div style="font-size:24px;font-weight:600;color:var(--accent)" id="s-yeni">0</div></div>
+    <div class="card" style="text-align:center"><div style="font-size:10px;color:var(--text3);margin-bottom:4px;text-transform:uppercase" id="s4-label">Fazla</div><div style="font-size:24px;font-weight:600;color:var(--red)" id="s-fazla">0</div></div>
+  </div>
+</div>
+
+<div id="sonuc-tablo" style="display:none">
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-hd">
+      <div class="card-title" id="tablo-baslik">Sonuçlar</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <label style="font-size:11px;color:var(--text2);display:flex;align-items:center;gap:5px;cursor:pointer">
+          <input type="checkbox" id="sadece-farkli" style="width:auto" onchange="renderSonuclar()"> Sadece farklıları göster
+        </label>
+        <button class="btn btn-ghost btn-sm" onclick="printKarsilastirma()">⎙ PDF</button>
+      </div>
+    </div>
+    <table>
+      <thead id="kar-thead"></thead>
+      <tbody id="kar-tablo"></tbody>
+    </table>
+  </div>
+
+  <div class="card" id="fazla-card">
+    <div class="card-hd">
+      <div class="card-title" id="fazla-baslik" style="color:var(--red)">Fazla Kayıtlar</div>
+    </div>
+    <table>
+      <thead id="fazla-thead"></thead>
+      <tbody id="fazla-tablo"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Platform Seç Modal (güncelle/ekle/sil için) -->
+<div class="modal-overlay" id="islem-modal">
+  <div class="modal">
+    <div class="modal-hd"><div class="modal-title" id="islem-baslik">Platform Seç</div><span class="modal-close" onclick="modalKapat('islem-modal')">✕</span></div>
+    <div class="fg"><label class="fl">Hedef Platform(lar)</label><div id="islem-platformlar" style="display:flex;flex-direction:column;gap:6px"></div></div>
+    <div class="fg" id="islem-gign-grup" style="display:none"><label class="fl">Eklenecek GIGN Başlığı</label><select id="islem-gign-sel"></select></div>
+    <input type="hidden" id="islem-tip">
+    <input type="hidden" id="islem-veri">
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="modalKapat('islem-modal')">İptal</button>
+      <button class="btn btn-primary" onclick="islemUygula()">Uygula</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+let aktifMod='dis', sonuclar=[], fazlalar=[], seciliPlatformAdi='', tumPlatformlar=[], tumNodes=[];
+let platformSeviyeler={};// pid -> [{SeviyeID,SeviyeNo,SeviyeAdi}]
+
+fetch('/api/platform').then(r=>r.json()).then(d=>{
+  tumPlatformlar=d;
+  document.getElementById('platform-sec').innerHTML=
+    d.filter(p=>p.HavuzMu!=1&&p.HavuzMu!='1').map(p=>`<option value="${p.PlatformID}">${p.PlatformAdi}</option>`).join('');
+  if(d.filter(p=>p.HavuzMu!=1&&p.HavuzMu!='1').length)platformDegis();
+});
+
+function platformDegis(){
+  const pid=document.getElementById('platform-sec').value;
+  const sel=document.getElementById('platform-sec').selectedOptions[0];
+  seciliPlatformAdi=sel?sel.textContent:'';
+  if(!pid)return;
+  fetch(`/api/platform/${pid}/seviye`).then(r=>r.json()).then(d=>{
+    platformSeviyeler[pid]=d;
+    document.getElementById('seviye-sec').innerHTML=d.map(s=>`<option value="${s.SeviyeNo}">${s.SeviyeAdi} (Seviye ${s.SeviyeNo})</option>`).join('');
+  });
+  fetch(`/api/platform/${pid}/ister_agaci`).then(r=>r.json()).then(d=>{
+    tumNodes=d;
+    const basliklar=d.filter(n=>n.IsterTipi==='B'||!n.ParentID);
+    document.getElementById('gign-baslik-sec').innerHTML='<option value="">Tüm İsterler</option>'+
+      basliklar.map(n=>`<option value="${n.NodeNumarasi}">${n.NodeNumarasi?n.NodeNumarasi+' — ':''}${(n.Icerik||'').substring(0,50)}</option>`).join('');
+    document.getElementById('islem-gign-sel').innerHTML='<option value="">Kök seviyeye ekle</option>'+
+      basliklar.map(n=>`<option value="${n.NodeID}">${n.NodeNumarasi?n.NodeNumarasi+' — ':''}${(n.Icerik||'').substring(0,50)}</option>`).join('');
+  });
+}
+
+function modSec(mod){
+  aktifMod=mod;
+  document.getElementById('btn-dis').classList.toggle('on',mod==='dis');
+  document.getElementById('btn-havuz').classList.toggle('on',mod==='havuz');
+  document.getElementById('dis-panel').style.display=mod==='dis'?'block':'none';
+  document.getElementById('havuz-panel').style.display=mod==='havuz'?'block':'none';
+  document.getElementById('sonuc-tablo').style.display='none';
+  document.getElementById('sonuc-ozet').style.display='none';
+}
+
+// DOSYA YÜKLE
+function dosyaYukle(input){
+  const file=input.files[0];
+  if(!file)return;
+  const ext=file.name.split('.').pop().toLowerCase();
+  if(ext==='txt'||ext==='csv'){
+    const reader=new FileReader();
+    reader.onload=e=>document.getElementById('dis-liste').value=e.target.result;
+    reader.readAsText(file,'UTF-8');
+  }else if(ext==='xlsx'||ext==='xls'){
+    const reader=new FileReader();
+    reader.onload=e=>{
+      const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(ws,{header:1});
+      document.getElementById('dis-liste').value=rows.map(r=>r[0]||'').filter(r=>r.trim()).join('\n');
+    };
+    reader.readAsArrayBuffer(file);
+  }else{
+    alert('Desteklenen formatlar: txt, csv, xlsx');
+  }
+  input.value='';
+}
+
+function karsilastir(){
+  const pid=document.getElementById('platform-sec').value;
+  const esik=parseInt(document.getElementById('esik').value)||80;
+  const sevNo=parseInt(document.getElementById('seviye-sec').value)||2;
+  const gignBaslik=document.getElementById('gign-baslik-sec').value;
+  if(!pid){alert('Platform seçin');return}
+  if(aktifMod==='dis'){
+    let raw=document.getElementById('dis-liste').value.trim();
+    if(!raw){alert('Dış liste boş olamaz');return}
+    let dis_liste=raw.split('\n').filter(s=>s.trim()).map(s=>({metin:s.trim()}));
+    // GIGN başlık filtresi: sadece o başlığın altındaki isterler
+    let url=`/api/karsilastir/dis_liste`;
+    let body={platform_id:pid,dis_liste,esik,seviye_no:sevNo};
+    if(gignBaslik)body.gign_baslik=gignBaslik;
+    fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+    .then(r=>r.json()).then(d=>{
+      sonuclar=d.sonuclar;fazlalar=d.fazlalar;
+      document.getElementById('s3-label').textContent='Yeni (Dışta)';
+      document.getElementById('s4-label').textContent='Fazla (Bizde)';
+      document.getElementById('tablo-baslik').textContent='Dış Liste vs Bizim Liste';
+      document.getElementById('fazla-baslik').textContent='Bizde Olup Dış Listede Olmayan';
+      document.getElementById('kar-thead').innerHTML='<tr><th>Durum</th><th>Dış Liste</th><th>Bizim Kayıt (düzenlenebilir)</th><th>Benzerlik</th><th>İşlemler</th></tr>';
+      document.getElementById('fazla-thead').innerHTML='<tr><th>Numara</th><th>İçerik</th><th>İşlemler</th></tr>';
+      renderSonuclar();
+    });
+  }else{
+    fetch('/api/karsilastir/havuz',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({platform_id:pid,esik,seviye_no:sevNo})})
+    .then(r=>r.json()).then(d=>{
+      sonuclar=d.sonuclar.map(r=>({dis_metin:r.platform_metin,bizim_id:r.platform_node_id,
+        bizim_metin:r.havuz_metin,benzerlik:r.benzerlik,durum:r.durum==='farkli'?'yeni':r.durum}));
+      fazlalar=d.havuzda_fazla.map(r=>({bizim_id:r.havuz_id,bizim_metin:r.havuz_metin}));
+      document.getElementById('s3-label').textContent='Farklı';
+      document.getElementById('s4-label').textContent='Havuzda Fazla';
+      document.getElementById('tablo-baslik').textContent='Platform vs Havuz';
+      document.getElementById('fazla-baslik').textContent='Havuzda Olup Platformda Olmayan';
+      document.getElementById('kar-thead').innerHTML='<tr><th>Durum</th><th>Platform</th><th>Havuz</th><th>Benzerlik</th><th>İşlemler</th></tr>';
+      document.getElementById('fazla-thead').innerHTML='<tr><th>Numara</th><th>İçerik</th><th>İşlemler</th></tr>';
+      renderSonuclar();
+    });
+  }
+}
+
+function renderSonuclar(){
+  const sadeceFarkli=document.getElementById('sadece-farkli').checked;
+  document.getElementById('sonuc-ozet').style.display='block';
+  document.getElementById('sonuc-tablo').style.display='block';
+  document.getElementById('s-ayni').textContent=sonuclar.filter(r=>r.durum==='ayni').length;
+  document.getElementById('s-benzer').textContent=sonuclar.filter(r=>r.durum==='benzer').length;
+  document.getElementById('s-yeni').textContent=sonuclar.filter(r=>r.durum==='yeni').length;
+  document.getElementById('s-fazla').textContent=fazlalar.length;
+  let liste=sadeceFarkli?sonuclar.filter(r=>r.durum!=='ayni'):sonuclar;
+  const dl={ayni:'Aynı',benzer:'Benzer',yeni:'Yeni/Farklı'};
+  document.getElementById('kar-tablo').innerHTML=liste.map((r,i)=>`<tr class="kar-${r.durum}">
+    <td><span class="db-${r.durum}">${dl[r.durum]||r.durum}</span></td>
+    <td style="font-size:12px">${r.dis_metin||''}</td>
+    <td><input class="editable-cell" id="bizim-${i}" value="${(r.bizim_metin||'').replace(/"/g,'&quot;')}" style="min-width:150px"></td>
+    <td><span style="font-family:monospace;font-size:11px;color:${r.benzerlik>=80?'var(--green)':r.benzerlik>=60?'var(--amber)':'var(--red)'}">${r.benzerlik}%</span></td>
+    <td style="white-space:nowrap">
+      ${r.durum==='benzer'||r.durum==='ayni'?`<button class="btn btn-ghost btn-sm" style="font-size:10px" onclick="guncelleMod(${i},${r.bizim_id||'null'})">Güncelle →</button>`:''}
+      ${r.durum==='yeni'?`<button class="btn btn-primary btn-sm" style="font-size:10px" onclick="ekleMod(${i})">+ Ekle →</button>`:''}
+    </td>
+  </tr>`).join('');
+
+  document.getElementById('fazla-tablo').innerHTML=fazlalar.length
+    ?fazlalar.map((r,i)=>`<tr class="kar-fazla">
+      <td style="font-family:monospace;font-size:10px;color:var(--text3)">${r.bizim_id||'—'}</td>
+      <td style="font-size:12px">${r.bizim_metin||r.havuz_metin||''}</td>
+      <td><button class="btn btn-danger btn-sm" style="font-size:10px" onclick="silMod(${i})">Sil →</button></td>
+    </tr>`).join('')
+    :'<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text3)">Fazla kayıt yok</td></tr>';
+}
+
+// GÜNCELLE
+function guncelleMod(idx, nodeId){
+  const yeniMetin=document.getElementById(`bizim-${idx}`)?.value||sonuclar[idx].bizim_metin;
+  document.getElementById('islem-baslik').textContent='Güncelleme — Platform Seç';
+  document.getElementById('islem-tip').value='guncelle';
+  document.getElementById('islem-veri').value=JSON.stringify({nodeId,yeniMetin,idx});
+  document.getElementById('islem-gign-grup').style.display='none';
+  dolduruIslemPlatformlar();
+  document.getElementById('islem-modal').classList.add('on');
+}
+
+// EKLE
+function ekleMod(idx){
+  const metin=document.getElementById(`bizim-${idx}`)?.value||sonuclar[idx].dis_metin;
+  document.getElementById('islem-baslik').textContent='Yeni İster Ekle — Platform Seç';
+  document.getElementById('islem-tip').value='ekle';
+  document.getElementById('islem-veri').value=JSON.stringify({metin,idx});
+  document.getElementById('islem-gign-grup').style.display='block';
+  // GIGN başlık seçimi
+  const pid=document.getElementById('platform-sec').value;
+  const basliklar=tumNodes.filter(n=>n.IsterTipi==='B'||(n.GignBaslik&&!n.ParentID));
+  document.getElementById('islem-gign-sel').innerHTML='<option value="">Kök seviyeye ekle</option>'+
+    basliklar.map(n=>`<option value="${n.NodeID}">${n.NodeNumarasi?n.NodeNumarasi+' — ':''}${(n.Icerik||'').substring(0,50)}</option>`).join('');
+  dolduruIslemPlatformlar(true);
+  document.getElementById('islem-modal').classList.add('on');
+}
+
+// SİL
+function silMod(idx){
+  const r=fazlalar[idx];
+  const nodeId=r.bizim_id||r.havuz_id;
+  document.getElementById('islem-baslik').textContent='İster Sil — Platform Seç';
+  document.getElementById('islem-tip').value='sil';
+  document.getElementById('islem-veri').value=JSON.stringify({nodeId,idx});
+  document.getElementById('islem-gign-grup').style.display='none';
+  dolduruIslemPlatformlar(true);
+  document.getElementById('islem-modal').classList.add('on');
+}
+
+function dolduruIslemPlatformlar(coklaSec=false){
+  const pid=document.getElementById('platform-sec').value;
+  document.getElementById('islem-platformlar').innerHTML=
+    tumPlatformlar.map(p=>`<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;padding:5px 8px;border:1px solid var(--border2);border-radius:5px">
+      <input type="checkbox" value="${p.PlatformID}" style="width:auto" ${p.PlatformID==pid?'checked':''}>
+      ${p.PlatformAdi}${p.HavuzMu?' (HAVUZ)':''}
+    </label>`).join('');
+}
+
+function islemUygula(){
+  const tip=document.getElementById('islem-tip').value;
+  const veri=JSON.parse(document.getElementById('islem-veri').value);
+  const seciliPIDs=[...document.querySelectorAll('#islem-platformlar input:checked')].map(c=>parseInt(c.value));
+  if(!seciliPIDs.length){alert('En az bir platform seçin');return}
+  const gignParent=parseInt(document.getElementById('islem-gign-sel').value)||null;
+  const sevNo=parseInt(document.getElementById('seviye-sec').value)||2;
+
+  const islemYap=(pid)=>{
+    if(tip==='guncelle'){
+      return fetch(`/api/ister_node/${veri.nodeId}`,{method:'PUT',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({Icerik:veri.yeniMetin})});
+    }else if(tip==='ekle'){
+      const yapEkle=(sevID)=>fetch('/api/ister_node',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({PlatformID:pid,SeviyeID:sevID,ParentID:gignParent,Icerik:veri.metin,IsterTipi:'G'})});
+      const sevID=seviyelerIcinID(pid,sevNo);
+      if(sevID)return yapEkle(sevID);
+      return fetch(`/api/platform/${pid}/seviye`).then(r=>r.json()).then(sv=>{
+        platformSeviyeler[pid]=sv;
+        const s=sv.find(x=>x.SeviyeNo===sevNo)||sv[sv.length-1];
+        if(!s){alert('Platform için uygun seviye bulunamadı.');return Promise.resolve();}
+        return yapEkle(s.SeviyeID);
+      });
+    }else if(tip==='sil'){
+      return fetch(`/api/ister_node/${veri.nodeId}`,{method:'DELETE'});
+    }
+    return Promise.resolve();
+  };
+
+  Promise.all(seciliPIDs.map(pid=>islemYap(pid))).then(()=>{
+    modalKapat('islem-modal');
+    alert('İşlem başarıyla tamamlandı.');
+    karsilastir();
+  }).catch(e=>{alert('Hata: '+e);});
+}
+
+function seviyelerIcinID(pid,sevNo){
+  const sv=platformSeviyeler[pid];
+  if(!sv)return null;
+  const s=sv.find(x=>x.SeviyeNo===sevNo);
+  return s?s.SeviyeID:null;
+}
+
+function printKarsilastirma(){
+  const w=window.open('','_blank');
+  const dl={ayni:'Aynı',benzer:'Benzer',yeni:'Yeni/Farklı',fazla:'Fazla'};
+  w.document.write(`<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8">
+  <title>Karşılaştırma Raporu</title>
+  <style>body{font-family:'Segoe UI',sans-serif;font-size:12px;padding:20px;max-width:1000px;margin:0 auto}
+  h1{font-size:18px;margin-bottom:4px}.sub{font-size:11px;color:#8fa0b8;margin-bottom:20px}
+  table{width:100%;border-collapse:collapse;margin-bottom:20px}
+  th{text-align:left;padding:8px;background:#f0f3f7;border:1px solid #dde3ec;font-size:10px;text-transform:uppercase}
+  td{padding:8px;border:1px solid #dde3ec;font-size:11px}
+  .ayni{background:rgba(22,163,74,.1)}.benzer{background:rgba(217,119,6,.08)}.yeni{background:rgba(37,99,235,.08)}.fazla{background:rgba(220,38,38,.1)}
+  @media print{button{display:none}}</style></head><body>
+  <h1>Karşılaştırma Raporu — ${seciliPlatformAdi}</h1>
+  <div class="sub">${aktifMod==='dis'?'Dış Liste':'Havuz'} · ${new Date().toLocaleDateString('tr-TR')} · ${sonuclar.length} kayıt</div>
+  <button onclick="window.print()" style="margin-bottom:16px;padding:6px 14px;background:#2563eb;color:#fff;border:none;border-radius:5px;cursor:pointer">Yazdır / PDF</button>
+  <div style="display:flex;gap:16px;margin-bottom:16px;font-size:13px">
+    <span>Aynı: <b style="color:#16a34a">${document.getElementById('s-ayni').textContent}</b></span>
+    <span>Benzer: <b style="color:#d97706">${document.getElementById('s-benzer').textContent}</b></span>
+    <span>Yeni/Farklı: <b style="color:#2563eb">${document.getElementById('s-yeni').textContent}</b></span>
+    <span>Fazla: <b style="color:#dc2626">${document.getElementById('s-fazla').textContent}</b></span>
+  </div>
+  <table><thead><tr><th>Durum</th><th>Dış / Platform</th><th>Bizim / Havuz</th><th>Benzerlik</th></tr></thead>
+  <tbody>${sonuclar.map(r=>`<tr class="${r.durum}"><td>${dl[r.durum]||r.durum}</td><td>${r.dis_metin||''}</td><td>${r.bizim_metin||'—'}</td><td style="font-family:monospace">${r.benzerlik}%</td></tr>`).join('')}</tbody></table>
+  ${fazlalar.length?`<h2 style="font-size:14px;margin-bottom:8px">Fazla Kayıtlar</h2>
+  <table><thead><tr><th>#</th><th>İçerik</th></tr></thead>
+  <tbody>${fazlalar.map(r=>`<tr class="fazla"><td style="font-family:monospace;font-size:10px">${r.bizim_id||r.havuz_id||'—'}</td><td>${r.bizim_metin||''}</td></tr>`).join('')}</tbody></table>`:''}
+  </body></html>`);
+  w.document.close();
+}
+
+function modalKapat(id){document.getElementById(id).classList.remove('on')}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')modalKapat('islem-modal')});
+</script>
+{% endblock %}

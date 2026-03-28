@@ -1,0 +1,446 @@
+{% extends "base.html" %}
+{% block title %}Raporlar{% endblock %}
+{% block page_title %}Raporlar{% endblock %}
+{% block page_sub %}Sistem{% endblock %}
+
+{% block content %}
+<div class="tabs" id="rapor-tabs">
+  <div class="tab on" onclick="tabSec(0)">Firma Görüşleri</div>
+  <div class="tab" onclick="tabSec(1)">İster Durum Raporu</div>
+  <div class="tab" onclick="tabSec(2)">Platform Karşılaştırma</div>
+</div>
+
+<!-- SEKME 0: FİRMA GÖRÜŞLERİ -->
+<div id="tab-0">
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center">
+    <select id="f-platform" onchange="yukleGorusler()" style="width:170px">
+      <option value="">Tüm Platformlar</option>
+    </select>
+    <input id="f-firma" placeholder="Firma filtrele..." style="width:150px" oninput="filtreleGorusler()">
+    <input id="f-kategori" placeholder="Kategori filtrele..." style="width:170px" oninput="filtreleGorusler()">
+    <select id="f-seviye" onchange="filtreleGorusler()" style="width:140px">
+      <option value="">Tüm Seviyeler</option>
+    </select>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 320px;gap:16px">
+    <div class="card">
+      <div class="card-hd"><div class="card-title">Görüş Listesi</div><div id="gorus-sayac" style="font-size:11px;color:var(--text3)"></div></div>
+      <table id="gorus-tablo">
+        <thead><tr><th>Firma</th><th>Platform</th><th>Seviye</th><th>Numara</th><th>Kategori</th><th>Özet</th><th>Tarih</th></tr></thead>
+        <tbody id="gorus-tbody"></tbody>
+      </table>
+    </div>
+    <div>
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-hd"><div class="card-title">Firma Dağılımı</div></div>
+        <canvas id="firma-pie" height="200"></canvas>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Kategori Dağılımı</div></div>
+        <canvas id="kategori-pie" height="200"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SEKME 1: DURUM RAPORU -->
+<div id="tab-1" style="display:none">
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center">
+    <select id="d-platform" onchange="yukleOnaylar()" style="width:170px">
+      <option value="">Platform seçin...</option>
+    </select>
+    <select id="d-durum" onchange="filtreleDurum()" style="width:160px">
+      <option value="">Tüm Durumlar</option>
+      <option value="yesil">✓ Onaylı (Yeşil)</option>
+      <option value="sari">⚠ Görüş Var (Sarı)</option>
+      <option value="renksiz">○ Belirsiz (Renksiz)</option>
+    </select>
+    <select id="d-seviye" onchange="filtreleDurum()" style="width:150px">
+      <option value="">Tüm Seviyeler</option>
+    </select>
+    <input id="d-numara" placeholder="Numara filtrele..." style="width:150px" oninput="filtreleDurum()">
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 300px;gap:16px">
+    <div class="card">
+      <div class="card-hd">
+        <div class="card-title">İster Durum Tablosu</div>
+        <div id="durum-sayac" style="font-size:11px;color:var(--text3)"></div>
+      </div>
+      <table>
+        <thead><tr><th>Durum</th><th>Numara</th><th>Seviye</th><th>Konfig</th><th>İçerik</th><th>Görüş</th></tr></thead>
+        <tbody id="durum-tbody"></tbody>
+      </table>
+    </div>
+    <div>
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-hd"><div class="card-title">Durum Dağılımı</div></div>
+        <canvas id="durum-pie" height="220"></canvas>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Özet</div></div>
+        <div id="durum-ozet"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- SEKME 2: PLATFORM KARŞILAŞTIRMA -->
+<div id="tab-2" style="display:none">
+  <!-- Filtreler -->
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center">
+    <select id="k-baslik" onchange="filtreKarsilastirma()" style="width:200px">
+      <option value="">Tüm Başlıklar</option>
+    </select>
+    <select id="k-seviye" onchange="filtreKarsilastirma()" style="width:150px">
+      <option value="">Tüm Seviyeler</option>
+    </select>
+    <input id="k-numara" placeholder="İster No." style="width:120px" oninput="filtreKarsilastirma()">
+    <input id="k-kod" placeholder="Havuz Kodu (g1...)" style="width:140px" oninput="filtreKarsilastirma()">
+    <input id="k-metin" placeholder="İçerik ara..." style="width:150px" oninput="filtreKarsilastirma()">
+    <span id="k-aktif" style="font-size:10px;background:var(--accent-bg);color:var(--accent);padding:2px 8px;border-radius:10px;border:1px solid var(--accent-border);display:none"></span>
+    <button class="btn btn-ghost btn-sm" id="k-temizle" onclick="karsilastirmaTemizle()" style="display:none;color:var(--red)">✕ Temizle</button>
+    <div style="margin-left:auto;display:flex;gap:6px">
+      <button class="btn btn-ghost btn-sm" onclick="karsilastirmaExcel()">↓ Excel</button>
+    </div>
+  </div>
+  <!-- Tablo -->
+  <div id="k-yukleniyor" class="empty">Yükleniyor...</div>
+  <div style="overflow-x:auto;border-radius:8px;border:1px solid var(--border)" id="k-tablo-wrap" style="display:none">
+    <table id="k-tablo" style="border-collapse:collapse;width:100%;font-size:11px;min-width:800px">
+      <thead id="k-thead"></thead>
+      <tbody id="k-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+let tumGorusler=[], filtreli=[], onayData=[], onayFiltreli=[];
+let firmaPie=null, kategoriPie=null, durumPie=null;
+let kData=null; // karşılaştırma verisi
+
+function tabSec(i){
+  document.querySelectorAll('.tab').forEach((t,j)=>t.classList.toggle('on',i===j));
+  document.getElementById('tab-0').style.display=i===0?'block':'none';
+  document.getElementById('tab-1').style.display=i===1?'block':'none';
+  document.getElementById('tab-2').style.display=i===2?'block':'none';
+  if(i===2&&!kData) yukleKarsilastirma();
+}
+
+// Platform yükle
+fetch('/api/platform').then(r=>r.json()).then(d=>{
+  const opts=d.filter(p=>p.HavuzMu!=1&&p.HavuzMu!='1').map(p=>`<option value="${p.PlatformID}">${p.PlatformAdi}</option>`).join('');
+  document.getElementById('f-platform').innerHTML='<option value="">Tüm Platformlar</option>'+opts;
+  document.getElementById('d-platform').innerHTML='<option value="">Platform seçin...</option>'+opts;
+});
+
+// ── KARŞILAŞTIRMA ─────────────────────────────────────────────────────────────
+function yukleKarsilastirma(){
+  document.getElementById('k-yukleniyor').style.display='block';
+  document.getElementById('k-tablo-wrap').style.display='none';
+  fetch('/api/rapor/karsilastirma').then(r=>r.json()).then(d=>{
+    if(d.hata){document.getElementById('k-yukleniyor').textContent=d.hata;return;}
+    kData=d;
+    // Başlık filtresi doldur
+    const basliklar=d.havuz_isterler.filter(n=>n.IsterTipi==='B');
+    document.getElementById('k-baslik').innerHTML='<option value="">Tüm Başlıklar</option>'+
+      basliklar.map(n=>`<option value="${n.NodeID}">${n.NodeNumarasi?n.NodeNumarasi+' — ':''}${(n.Icerik||'').substring(0,50)}</option>`).join('');
+    // Seviye filtresi doldur
+    const seviyeler=[...new Map(d.havuz_isterler.map(n=>[n.SeviyeNo,n.SeviyeAdi])).entries()].sort((a,b)=>a[0]-b[0]);
+    document.getElementById('k-seviye').innerHTML='<option value="">Tüm Seviyeler</option>'+
+      seviyeler.map(([no,adi])=>`<option value="${no}">${adi}</option>`).join('');
+    document.getElementById('k-yukleniyor').style.display='none';
+    renderKarsilastirma(d.havuz_isterler);
+  }).catch(()=>{
+    document.getElementById('k-yukleniyor').textContent='Veri yüklenirken hata oluştu.';
+  });
+}
+
+function filtreKarsilastirma(){
+  if(!kData)return;
+  const bFlt=document.getElementById('k-baslik').value;
+  const sFlt=document.getElementById('k-seviye').value;
+  const nFlt=document.getElementById('k-numara').value.trim().toLowerCase();
+  const kFlt=document.getElementById('k-kod').value.trim().toLowerCase();
+  const mFlt=document.getElementById('k-metin').value.trim().toLowerCase();
+
+  let liste=kData.havuz_isterler;
+
+  // Başlık filtresi — seçili başlık ve torunları
+  if(bFlt){
+    const bid=parseInt(bFlt);
+    const tr=new Set();
+    const ekle=(id)=>{tr.add(id);kData.havuz_isterler.filter(n=>n.ParentID===id).forEach(c=>ekle(c.NodeID));};
+    ekle(bid);
+    liste=liste.filter(n=>tr.has(n.NodeID));
+  }
+  if(sFlt) liste=liste.filter(n=>String(n.SeviyeNo)===sFlt);
+  if(nFlt||kFlt||mFlt){
+    const ids=new Set();
+    liste.forEach(n=>{
+      let ok=true;
+      if(nFlt&&!(n.NodeNumarasi||'').toLowerCase().includes(nFlt))ok=false;
+      if(kFlt&&!(n.HavuzKodu||'').toLowerCase().includes(kFlt))ok=false;
+      if(mFlt&&!(n.Icerik||'').toLowerCase().includes(mFlt))ok=false;
+      if(ok)ids.add(n.NodeID);
+    });
+    // Ataları da ekle
+    const ea=(nid)=>{const nd=kData.havuz_isterler.find(n=>n.NodeID===nid);if(nd&&nd.ParentID&&!ids.has(nd.ParentID)){ids.add(nd.ParentID);ea(nd.ParentID);}};
+    ids.forEach(id=>ea(id));
+    liste=liste.filter(n=>ids.has(n.NodeID));
+  }
+
+  const aktif=[bFlt,sFlt,nFlt,kFlt,mFlt].filter(Boolean);
+  const aktifEl=document.getElementById('k-aktif');
+  const temizEl=document.getElementById('k-temizle');
+  if(aktif.length){aktifEl.style.display='inline';aktifEl.textContent=aktif.length+' filtre · '+liste.length+' satır';temizEl.style.display='inline-flex';}
+  else{aktifEl.style.display='none';temizEl.style.display='none';}
+
+  renderKarsilastirma(liste);
+}
+
+function karsilastirmaTemizle(){
+  ['k-baslik','k-seviye'].forEach(id=>document.getElementById(id).value='');
+  ['k-numara','k-kod','k-metin'].forEach(id=>document.getElementById(id).value='');
+  filtreKarsilastirma();
+}
+
+function renderKarsilastirma(liste){
+  if(!kData||!liste)return;
+  const platList=kData.platformlar;
+
+  // THEAD
+  const thead=document.getElementById('k-thead');
+  const thStyle='padding:7px 9px;background:#1e293b;color:#f1f5f9;font-size:10px;font-weight:600;text-align:left;white-space:nowrap;border:1px solid #334155;position:sticky;top:0;z-index:2';
+  const thStyleHavuz='padding:7px 9px;background:#1e3a5f;color:#93c5fd;font-size:10px;font-weight:600;text-align:left;white-space:nowrap;border:1px solid #334155;position:sticky;top:0;z-index:2';
+  thead.innerHTML='<tr>'
+    +'<th style="'+thStyle+';min-width:80px">Havuz Kodu</th>'
+    +'<th style="'+thStyleHavuz+';min-width:300px">Havuz İçeriği</th>'
+    +platList.map(p=>'<th style="'+thStyle+';min-width:240px">'+p.PlatformAdi+'</th>').join('')
+    +'</tr>';
+
+  // TBODY
+  const tbody=document.getElementById('k-tbody');
+  const platMapData=kData.plat_map||{};
+
+  let html='';
+  liste.forEach(function(n){
+    const isBaslik=n.IsterTipi==='B';
+    const sColors=[['#dbeafe','#1e3a8a'],['#dcfce7','#14532d'],['#f3e8ff','#4c1d95'],['#fef3c7','#78350f']];
+    const bg=sColors[((n.SeviyeNo||1)-1)%sColors.length][0];
+    const fg=sColors[((n.SeviyeNo||1)-1)%sColors.length][1];
+
+    if(isBaslik){
+      const colSpan=platList.length+2;
+      html+='<tr>'
+        +'<td colspan="'+colSpan+'" style="padding:8px 12px;background:#1e293b;color:#f1f5f9;font-size:11px;font-weight:700;border:1px solid #334155;border-left:4px solid #f59e0b">'
+        +(n.NodeNumarasi?'<span style="font-family:monospace;font-size:10px;color:#fcd34d;margin-right:8px">'+n.NodeNumarasi+'</span>':'')
+        +(n.HavuzKodu?'<span style="font-family:monospace;font-size:9px;background:#92400e;color:#fef3c7;padding:1px 5px;border-radius:3px;margin-right:6px">'+n.HavuzKodu+'</span>':'')
+        +(n.Icerik||'(boş)')
+        +'</td></tr>';
+    } else {
+      const tdStyle='padding:6px 9px;border:1px solid var(--border);font-size:11px;vertical-align:top';
+      // Havuz kodu hücresi — badge olarak göster
+      const kodCell='<td style="'+tdStyle+'">'
+        +(n.HavuzKodu?'<span style="font-family:monospace;font-size:10px;font-weight:600;background:'+bg+';color:'+fg+';padding:2px 6px;border-radius:3px">'+n.HavuzKodu+'</span>':'—')
+        +'</td>';
+      // Havuz içeriği hücresi
+      const numHtml=n.NodeNumarasi?'<span style="font-family:monospace;font-size:9px;color:var(--accent2);margin-right:4px">'+n.NodeNumarasi+'</span>':'';
+      const havuzCell='<td style="'+tdStyle+';background:var(--accent-bg)">'+numHtml+(n.Icerik||'(boş)')+'</td>';
+      // Platform hücreleri — String(p.PlatformID) ile karşılaştır
+      const platCells=platList.map(function(p){
+        const pidStr=String(p.PlatformID);
+        const kodMap=platMapData[n.HavuzKodu];
+        const pi=kodMap?kodMap[pidStr]:null;
+        if(!pi) return '<td style="'+tdStyle+';color:var(--text3)">—</td>';
+        const deg=pi.DegistirildiMi;
+        return '<td style="'+tdStyle+(deg?';background:#fffbeb':'')+'">'+
+          (pi.Icerik||'(boş)')+
+          (deg?'<span style="font-size:9px;color:var(--amber);margin-left:4px">●</span>':'')+
+          '</td>';
+      }).join('');
+      html+='<tr onmouseover="this.style.background=\'var(--bg3)\'" onmouseout="this.style.background=\'\'">'+kodCell+havuzCell+platCells+'</tr>';
+    }
+  });
+
+  tbody.innerHTML=html||'<tr><td colspan="99" style="text-align:center;padding:20px;color:var(--text3)">Sonuç bulunamadı</td></tr>';
+  document.getElementById('k-tablo-wrap').style.display='block';
+}
+
+function karsilastirmaExcel(){
+  if(!kData)return;
+  const platList=kData.platformlar;
+  const platMapData=kData.plat_map||{};
+  let csv='\uFEFF';
+  csv+='Havuz Kodu,Seviye,Numara,Havuz İçeriği,'+platList.map(function(p){return p.PlatformAdi;}).join(',')+'\n';
+  kData.havuz_isterler.forEach(function(n){
+    if(n.IsterTipi==='B'){
+      csv+='"'+(n.HavuzKodu||'')+'","BAŞLIK","'+(n.NodeNumarasi||'')+'","'+((n.Icerik||'').replace(/"/g,'""'))+'",'+platList.map(function(){return '""';}).join(',')+'\n';
+    } else {
+      const platCols=platList.map(function(p){
+        const pidStr=String(p.PlatformID);
+        const kodMap=platMapData[n.HavuzKodu];
+        const pi=kodMap?kodMap[pidStr]:null;
+        return '"'+(pi?((pi.Icerik||'').replace(/"/g,'""')):'—')+'"';
+      }).join(',');
+      csv+='"'+(n.HavuzKodu||'')+'","'+(n.SeviyeAdi||'')+'","'+(n.NodeNumarasi||'')+'","'+((n.Icerik||'').replace(/"/g,'""'))+'",'+platCols+'\n';
+    }
+  });
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='platform_karsilastirma.csv';a.click();
+}
+
+// ── GÖRÜŞLER ──────────────────────────────────────────────────────────────────
+function yukleGorusler(){
+  const pid=document.getElementById('f-platform').value;
+  const url='/api/rapor/firma_gorusleri'+(pid?`?platform_id=${pid}`:'');
+  fetch(url).then(r=>r.json()).then(d=>{
+    tumGorusler=d;
+    // Seviye filter options
+    const seviyeler=[...new Set(d.map(r=>r.SeviyeAdi).filter(Boolean))];
+    document.getElementById('f-seviye').innerHTML='<option value="">Tüm Seviyeler</option>'+
+      seviyeler.map(s=>`<option value="${s}">${s}</option>`).join('');
+    filtreleGorusler();
+  });
+}
+
+function filtreleGorusler(){
+  const pid=document.getElementById('f-platform').value;
+  const firma=document.getElementById('f-firma').value.toLowerCase();
+  const kat=document.getElementById('f-kategori').value.toLowerCase();
+  const sev=document.getElementById('f-seviye').value;
+  filtreli=tumGorusler.filter(r=>
+    (!pid||String(r.PlatformID)===pid)&&
+    (!firma||(r.FirmaAdi||'').toLowerCase().includes(firma))&&
+    (!kat||(r.GorusKategori||'').toLowerCase().includes(kat))&&
+    (!sev||(r.SeviyeAdi||'')===sev)
+  );
+  renderGorusler();
+  renderGorusPie();
+}
+
+function renderGorusler(){
+  document.getElementById('gorus-sayac').textContent=`${filtreli.length} kayıt`;
+  document.getElementById('gorus-tbody').innerHTML=filtreli.map(r=>`<tr>
+    <td><b>${r.FirmaAdi}</b></td>
+    <td><span class="badge b-blue" style="font-size:10px">${r.PlatformAdi}</span></td>
+    <td><span style="font-size:10px;background:var(--bg3);padding:2px 6px;border-radius:3px">${r.SeviyeAdi}</span></td>
+    <td><span class="num-badge" style="font-size:10px">${r.NodeNumarasi||'—'}</span></td>
+    <td style="font-size:11px;color:var(--text2)">${r.GorusKategori||'—'}</td>
+    <td style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.GorusOzet||r.NodeIcerik||''}</td>
+    <td style="font-size:10px;color:var(--text3)">${r.OlusturmaTarihi}</td>
+  </tr>`).join('');
+}
+
+function renderGorusPie(){
+  // Firma pie
+  const firmaSay={};filtreli.forEach(r=>firmaSay[r.FirmaAdi]=(firmaSay[r.FirmaAdi]||0)+1);
+  const firmaLabels=Object.keys(firmaSay);
+  const firmaData=firmaLabels.map(k=>firmaSay[k]);
+  const colors=['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#6366f1'];
+  if(firmaPie)firmaPie.destroy();
+  firmaPie=new Chart(document.getElementById('firma-pie'),{
+    type:'pie',
+    data:{labels:firmaLabels,datasets:[{data:firmaData,backgroundColor:colors.slice(0,firmaLabels.length)}]},
+    options:{responsive:true,plugins:{legend:{position:'bottom',labels:{font:{size:11}}}}}
+  });
+  // Kategori pie
+  const katSay={};filtreli.forEach(r=>{const k=r.GorusKategori||'Kategorisiz';katSay[k]=(katSay[k]||0)+1});
+  const katLabels=Object.keys(katSay);
+  const katData=katLabels.map(k=>katSay[k]);
+  if(kategoriPie)kategoriPie.destroy();
+  kategoriPie=new Chart(document.getElementById('kategori-pie'),{
+    type:'doughnut',
+    data:{labels:katLabels,datasets:[{data:katData,backgroundColor:colors.slice(0,katLabels.length)}]},
+    options:{responsive:true,plugins:{legend:{position:'bottom',labels:{font:{size:11}}}}}
+  });
+}
+
+// ── DURUM RAPORU ──────────────────────────────────────────────────────────────
+function yukleOnaylar(){
+  const pid=document.getElementById('d-platform').value;
+  if(!pid)return;
+  fetch(`/api/rapor/onay_durumu?platform_id=${pid}`).then(r=>r.json()).then(d=>{
+    onayData=d;
+    const seviyeler=[...new Set(d.map(r=>r.SeviyeAdi).filter(Boolean))];
+    document.getElementById('d-seviye').innerHTML='<option value="">Tüm Seviyeler</option>'+
+      seviyeler.map(s=>`<option value="${s}">${s}</option>`).join('');
+    filtreleDurum();
+  });
+}
+
+function getDurumRenk(r){
+  if(r.OnayDurumu)return 'yesil';
+  if(r.GorusSayisi>0)return 'sari';
+  return 'renksiz';
+}
+
+function filtreleDurum(){
+  const durum=document.getElementById('d-durum').value;
+  const sev=document.getElementById('d-seviye').value;
+  const num=document.getElementById('d-numara').value.toLowerCase();
+  onayFiltreli=onayData.filter(r=>
+    (!durum||getDurumRenk(r)===durum)&&
+    (!sev||(r.SeviyeAdi||'')===sev)&&
+    (!num||(r.NodeNumarasi||'').toLowerCase().includes(num))
+  );
+  renderOnaylar();
+  renderDurumPie();
+}
+
+function renderOnaylar(){
+  document.getElementById('durum-sayac').textContent=`${onayFiltreli.length} kayıt`;
+  document.getElementById('durum-tbody').innerHTML=onayFiltreli.map(r=>{
+    const renk=getDurumRenk(r);
+    const renkBg={yesil:'var(--green-bg)',sari:'#fffbeb',renksiz:'var(--bg2)'};
+    const renkText={yesil:'✓ Onaylı',sari:'⚠ Görüş Var',renksiz:'○ Belirsiz'};
+    return `<tr style="background:${renkBg[renk]}">
+      <td><span style="font-size:10px;font-weight:600">${renkText[renk]}</span></td>
+      <td>${r.NodeNumarasi?`<span class="num-badge" style="font-size:10px">${r.NodeNumarasi}</span>`:'—'}</td>
+      <td><span style="font-size:10px;background:var(--bg3);padding:2px 6px;border-radius:3px">${r.SeviyeAdi}</span></td>
+      <td style="font-size:11px;color:var(--text3)">${r.KonfigAdi||'—'}</td>
+      <td style="font-size:11px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.Icerik||''}</td>
+      <td style="font-size:11px;text-align:center">${r.GorusSayisi||0}</td>
+    </tr>`;
+  }).join('');
+
+  const yesil=onayFiltreli.filter(r=>getDurumRenk(r)==='yesil').length;
+  const sari=onayFiltreli.filter(r=>getDurumRenk(r)==='sari').length;
+  const renksiz=onayFiltreli.filter(r=>getDurumRenk(r)==='renksiz').length;
+  document.getElementById('durum-ozet').innerHTML=`
+    <div style="display:flex;flex-direction:column;gap:6px;font-size:12px">
+      <div style="display:flex;justify-content:space-between;padding:6px 10px;background:var(--green-bg);border-radius:5px;border:1px solid var(--green-border)">
+        <span>✓ Onaylı</span><b style="color:var(--green)">${yesil}</b>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:6px 10px;background:#fffbeb;border-radius:5px;border:1px solid #fde68a">
+        <span>⚠ Görüş Var</span><b style="color:var(--amber)">${sari}</b>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:6px 10px;background:var(--bg3);border-radius:5px;border:1px solid var(--border)">
+        <span>○ Belirsiz</span><b>${renksiz}</b>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:6px 10px;background:var(--bg3);border-radius:5px;border:1px solid var(--border2);font-weight:600">
+        <span>Toplam</span><b>${onayFiltreli.length}</b>
+      </div>
+    </div>`;
+}
+
+function renderDurumPie(){
+  const yesil=onayFiltreli.filter(r=>getDurumRenk(r)==='yesil').length;
+  const sari=onayFiltreli.filter(r=>getDurumRenk(r)==='sari').length;
+  const renksiz=onayFiltreli.filter(r=>getDurumRenk(r)==='renksiz').length;
+  if(durumPie)durumPie.destroy();
+  durumPie=new Chart(document.getElementById('durum-pie'),{
+    type:'doughnut',
+    data:{
+      labels:['Onaylı','Görüş Var','Belirsiz'],
+      datasets:[{data:[yesil,sari,renksiz],backgroundColor:['#16a34a','#d97706','#94a3b8']}]
+    },
+    options:{responsive:true,plugins:{legend:{position:'bottom',labels:{font:{size:12}}}}}
+  });
+}
+
+yukleGorusler();
+</script>
+{% endblock %}

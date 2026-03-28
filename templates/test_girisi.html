@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% block title %}Test Girişi{% endblock %}
+{% block page_title %}Test Girişi{% endblock %}
+{% block page_sub %}İster Yönetimi{% endblock %}
+
+{% block content %}
+<div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+  <select id="platform-sec" onchange="platformDegis()" style="width:180px">
+    <option value="">Platform seçin...</option>
+  </select>
+  <select id="asama-sec" onchange="yukleTestler()" style="width:160px">
+    <option value="">Aşama seçin...</option>
+  </select>
+  <select id="filtre-sec" onchange="filtrele()" style="width:150px">
+    <option value="">Tümü</option>
+    <option value="girilmemis">Girilmemiş</option>
+    <option value="Basarili">Başarılı</option>
+    <option value="Hatali">Hatalı</option>
+  </select>
+</div>
+
+<div class="card">
+  <div class="card-hd">
+    <div class="card-title" id="tablo-baslik">Test Kayıtları</div>
+    <div id="tablo-ozet" style="font-size:11px;color:var(--text3)"></div>
+  </div>
+  <div id="test-empty" class="empty">Platform ve test aşaması seçin</div>
+  <table id="test-table" style="display:none">
+    <thead>
+      <tr>
+        <th>Numara</th>
+        <th>Üst İster</th>
+        <th>Test Kaydı</th>
+        <th>Aşama</th>
+        <th style="width:180px">Sonuç</th>
+      </tr>
+    </thead>
+    <tbody id="test-tablo"></tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let tumTestler=[], seciliPID=null, seciliAsamaID=null;
+
+fetch('/api/platform').then(r=>r.json()).then(d=>{
+  document.getElementById('platform-sec').innerHTML='<option value="">Platform seçin...</option>'+
+    d.filter(p=>p.HavuzMu!=1&&p.HavuzMu!='1').map(p=>`<option value="${p.PlatformID}">${p.PlatformAdi}</option>`).join('');
+});
+
+function platformDegis(){
+  seciliPID=document.getElementById('platform-sec').value||null;
+  seciliAsamaID=null;
+  if(!seciliPID)return;
+  // Dropdown'ı sıfırla
+  document.getElementById('asama-sec').innerHTML='<option value="">Aşama seçin...</option>';
+  fetch(`/api/platform/${seciliPID}/test_asama`).then(r=>r.json()).then(d=>{
+    if(!d.length){
+      document.getElementById('asama-sec').innerHTML='<option value="">Aşama tanımlı değil</option>';
+      document.getElementById('test-empty').textContent='Bu platformda test aşaması tanımlanmamış. Platformlar sayfasından ekleyin.';
+      return;
+    }
+    document.getElementById('asama-sec').innerHTML='<option value="">Aşama seçin...</option>'+
+      d.map(a=>`<option value="${a.TestAsamaID}">${a.AsamaAdi}</option>`).join('');
+  });
+  document.getElementById('test-empty').style.display='block';
+  document.getElementById('test-empty').textContent='Test aşaması seçin';
+  document.getElementById('test-table').style.display='none';
+}
+
+function yukleTestler(){
+  seciliAsamaID=parseInt(document.getElementById('asama-sec').value)||null;
+  if(!seciliPID||!seciliAsamaID){
+    document.getElementById('test-empty').style.display='block';
+    document.getElementById('test-empty').textContent='Test aşaması seçin';
+    document.getElementById('test-table').style.display='none';
+    return;
+  }
+  // Girilmiş sonuçlar
+  const url1=`/api/test_sonuc?platform_id=${seciliPID}&asama_id=${seciliAsamaID}`;
+  // Girilmemiş node'lar
+  const url2=`/api/test_sonuc/girilmemis?platform_id=${seciliPID}&asama_id=${seciliAsamaID}`;
+  Promise.all([
+    fetch(url1).then(r=>r.json()),
+    fetch(url2).then(r=>r.json())
+  ]).then(([sonuclar, girilmemis])=>{
+    // Girilmiş sonuçlar
+    const girilmisMap={};
+    sonuclar.forEach(r=>girilmisMap[r.NodeID]=r);
+    // Girilmemiş node'ları ekle
+    const girilmemisEkstra=girilmemis.filter(n=>!girilmisMap[n.NodeID]).map(n=>({
+      NodeID:n.NodeID,
+      NodeIcerik:n.Icerik,
+      NodeNumarasi:n.NodeNumarasi||'',
+      ParentIcerik:n.ParentIcerik||'',
+      GrandParentIcerik:n.GrandParentIcerik||'',
+      AsamaAdi:document.getElementById('asama-sec').selectedOptions[0]?.textContent||'',
+      TestAsamaID:seciliAsamaID,
+      Sonuc:null,
+      SeviyeAdi:n.SeviyeAdi
+    }));
+    tumTestler=[...sonuclar.map(r=>({...r,TestAsamaID:seciliAsamaID})),...girilmemisEkstra];
+    filtrele();
+  });
+}
+
+function filtrele(){
+  const f=document.getElementById('filtre-sec').value;
+  let liste=tumTestler;
+  if(f==='girilmemis')liste=liste.filter(r=>!r.Sonuc);
+  else if(f==='Basarili')liste=liste.filter(r=>r.Sonuc==='Basarili');
+  else if(f==='Hatali')liste=liste.filter(r=>r.Sonuc==='Hatali');
+
+  const bas=tumTestler.filter(r=>r.Sonuc==='Basarili').length;
+  const hat=tumTestler.filter(r=>r.Sonuc==='Hatali').length;
+  const gir=tumTestler.filter(r=>!r.Sonuc).length;
+  document.getElementById('tablo-ozet').textContent=`${bas} başarılı · ${hat} hatalı · ${gir} girilmemiş · toplam ${tumTestler.length}`;
+
+  if(!liste.length){
+    document.getElementById('test-empty').style.display='block';
+    document.getElementById('test-empty').textContent='Kayıt bulunamadı';
+    document.getElementById('test-table').style.display='none';
+    return;
+  }
+  document.getElementById('test-empty').style.display='none';
+  document.getElementById('test-table').style.display='table';
+
+  document.getElementById('test-tablo').innerHTML=liste.map(r=>{
+    const ustIster=r.GrandParentIcerik||r.ParentIcerik||'—';
+    const isterAdi=r.NodeIcerik||r.Icerik||'';
+    const numara=r.NodeNumarasi||'';
+    const asamaAdi=r.AsamaAdi||'—';
+    const sonuc=r.Sonuc;
+    const asamaID=r.TestAsamaID||seciliAsamaID;
+    return `<tr id="satir-${r.NodeID}-${asamaID}">
+      <td>${numara?`<span class="badge b-blue" style="font-family:monospace;font-size:10px">${numara}</span>`:'—'}</td>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--text3)" title="${ustIster}">${ustIster}</td>
+      <td style="max-width:240px;font-size:12px">${isterAdi}</td>
+      <td><span class="badge b-purple" style="font-size:10px">${asamaAdi}</span></td>
+      <td>
+        <div style="display:flex;gap:4px">
+          <span id="btn-bas-${r.NodeID}-${asamaID}" onclick="sonucGir(${r.NodeID},${asamaID},'Basarili')"
+            style="padding:3px 10px;border-radius:4px;font-size:10px;font-weight:500;cursor:pointer;border:1px solid var(--green-border);
+            background:${sonuc==='Basarili'?'var(--green)':'var(--green-bg)'};color:${sonuc==='Basarili'?'#fff':'var(--green)'}">
+            Başarılı
+          </span>
+          <span id="btn-hat-${r.NodeID}-${asamaID}" onclick="sonucGir(${r.NodeID},${asamaID},'Hatali')"
+            style="padding:3px 10px;border-radius:4px;font-size:10px;font-weight:500;cursor:pointer;border:1px solid var(--red-border);
+            background:${sonuc==='Hatali'?'var(--red)':'var(--red-bg)'};color:${sonuc==='Hatali'?'#fff':'var(--red)'}">
+            Hatalı
+          </span>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function sonucGir(nodeId, asamaId, sonuc){
+  if(!asamaId){alert('Test aşaması seçin.');return;}
+  fetch('/api/test_sonuc',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({NodeID:nodeId,TestAsamaID:asamaId,Sonuc:sonuc})})
+  .then(r=>r.json()).then(d=>{
+    if(d.ok){
+      // Satırdaki butonları güncelle (sayfa yenileme olmadan)
+      const btnBas=document.getElementById(`btn-bas-${nodeId}-${asamaId}`);
+      const btnHat=document.getElementById(`btn-hat-${nodeId}-${asamaId}`);
+      if(btnBas){
+        btnBas.style.background=sonuc==='Basarili'?'var(--green)':'var(--green-bg)';
+        btnBas.style.color=sonuc==='Basarili'?'#fff':'var(--green)';
+      }
+      if(btnHat){
+        btnHat.style.background=sonuc==='Hatali'?'var(--red)':'var(--red-bg)';
+        btnHat.style.color=sonuc==='Hatali'?'#fff':'var(--red)';
+      }
+      // Lokal veriyi güncelle
+      const kayit=tumTestler.find(r=>r.NodeID===nodeId&&r.TestAsamaID===asamaId);
+      if(kayit)kayit.Sonuc=sonuc;
+      // Özeti güncelle
+      const bas=tumTestler.filter(r=>r.Sonuc==='Basarili').length;
+      const hat=tumTestler.filter(r=>r.Sonuc==='Hatali').length;
+      const gir=tumTestler.filter(r=>!r.Sonuc).length;
+      document.getElementById('tablo-ozet').textContent=`${bas} başarılı · ${hat} hatalı · ${gir} girilmemiş · toplam ${tumTestler.length}`;
+    }
+  });
+}
+</script>
+{% endblock %}

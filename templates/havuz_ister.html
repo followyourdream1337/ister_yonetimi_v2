@@ -1,0 +1,785 @@
+{% extends "base.html" %}
+{% block title %}Havuz İsterler{% endblock %}
+{% block page_title %}Havuz İsterler{% endblock %}
+{% block page_sub %}İster Yönetimi{% endblock %}
+
+{% block extra_style %}
+<style>
+.ik{border-radius:7px;margin-bottom:5px;border:1px solid var(--border);padding:9px 11px}
+.ik.renksiz{background:var(--bg2)}
+.ik.sari{background:#fef9c3;border-color:#eab308;border-width:2px}
+.ik.yesil{background:#dcfce7;border-color:#16a34a;border-width:2px}
+.ik-row{display:flex;align-items:flex-start;gap:7px}
+.tik{width:17px;height:17px;border-radius:4px;border:2px solid var(--border2);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;margin-top:2px;font-size:10px;font-weight:700}
+.tik.on{background:var(--green);border-color:var(--green);color:#fff}
+.nb{font-size:9px;font-weight:600;font-family:monospace;color:var(--accent2);background:var(--accent-bg);padding:1px 5px;border-radius:3px;border:1px solid var(--accent-border)}
+.kb-g{font-size:9px;font-weight:600;font-family:monospace;background:#dbeafe;color:#1d4ed8;padding:1px 5px;border-radius:3px;border:1px solid var(--accent-border)}
+.kb-b{font-size:9px;font-weight:600;font-family:monospace;background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:3px;border:1px solid #fde68a}
+.bm{padding:2px 7px;border-radius:4px;font-size:10px;cursor:pointer;border:1px solid var(--border2);background:transparent;color:var(--text2)}
+.bm:hover{background:var(--bg3)}
+.bm.d{color:var(--red);border-color:var(--red-border)}
+.indent{margin-left:18px;border-left:1px dashed var(--border2);padding-left:7px;margin-top:3px}
+.it-wrap{margin-top:7px;overflow-x:auto}
+.it-wrap table{border-collapse:collapse;width:100%}
+.it-wrap th{background:var(--bg3);padding:4px 7px;font-size:10px;border:1px solid var(--border2)}
+.it-wrap td{padding:4px 7px;font-size:11px;border:1px solid var(--border2)}
+.ctx{position:fixed;background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:4px;z-index:500;min-width:180px;box-shadow:0 4px 16px rgba(0,0,0,.12);display:none}
+.ctx-i{padding:6px 12px;font-size:12px;cursor:pointer;border-radius:4px}
+.ctx-i:hover{background:var(--bg3)}
+.ctx-sep{height:1px;background:var(--border);margin:3px 0}
+mark{background:#fef08a;border-radius:2px;padding:0 1px}
+.flt-aktif{font-size:10px;background:var(--accent-bg);color:var(--accent);padding:2px 8px;border-radius:10px;border:1px solid var(--accent-border)}
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- FİLTRE BARI -->
+<div style="display:flex;gap:7px;margin-bottom:12px;align-items:center;flex-wrap:wrap">
+  <select id="f-konfig" onchange="filtrele()" style="width:160px"><option value="">Tüm Konfigler</option></select>
+  <select id="f-baslik" onchange="filtrele()" style="width:170px"><option value="">Tüm Başlıklar</option></select>
+  <select id="f-seviye" onchange="filtrele()" style="width:130px"><option value="">Tüm Seviyeler</option></select>
+  <input id="f-numara" placeholder="İster No." style="width:120px" oninput="filtrele()">
+  <input id="f-kod" placeholder="Havuz Kodu (g1...)" style="width:140px" oninput="filtrele()">
+  <input id="f-metin" placeholder="İçerik ara..." style="width:140px" oninput="filtrele()">
+  <span id="f-aktif" class="flt-aktif" style="display:none"></span>
+  <button class="bm" id="f-temizle" onclick="filtreleriTemizle()" style="display:none;color:var(--red);border-color:var(--red-border)">✕ Temizle</button>
+  <div style="margin-left:auto;display:flex;gap:6px">
+    <button class="bm" style="color:var(--accent);border-color:var(--accent-border);background:var(--accent-bg)" onclick="yeniIsterModal(null,'G')">+ İster Ekle</button>
+    <button class="bm" onclick="topluUploadAc()">↑ Toplu Yükle</button>
+    <button class="bm" onclick="exportListe()">↓ Export</button>
+  </div>
+</div>
+
+<!-- ANA GRID -->
+<div style="display:grid;grid-template-columns:420px 1fr;gap:10px;height:calc(100vh - 165px)">
+  <div style="overflow-y:auto;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:8px" id="liste-panel">
+    <div class="empty" id="liste-bos">Yükleniyor...</div>
+    <div id="liste-icerik"></div>
+  </div>
+  <div class="card" style="overflow-y:auto">
+    <div class="empty" id="detay-bos" style="margin-top:40px">Sol taraftan bir ister seçin</div>
+    <div id="detay-icerik" style="display:none"></div>
+  </div>
+</div>
+
+<!-- SAĞ TIK MENÜ -->
+<div id="ctx" class="ctx">
+  <div class="ctx-i" onclick="ctxYeniGereksinim()">+ Alt Gereksinim Ekle</div>
+  <div class="ctx-i" onclick="ctxYeniBaslik()">+ Alt Başlık Ekle</div>
+  <div class="ctx-i" onclick="ctxBullet()">• Bullet Ekle (madde)</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-i" onclick="ctxSiraYukari()">↑ Yukarı Taşı</div>
+  <div class="ctx-i" onclick="ctxSiraAsagi()">↓ Aşağı Taşı</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-i" onclick="ctxDuzenle()">✎ Düzenle</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-i" style="color:var(--red)" onclick="ctxSil()">✕ Sil</div>
+</div>
+
+<!-- YENİ İSTER MODAL -->
+<div class="modal-overlay" id="m-ister">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-hd"><div class="modal-title" id="mi-baslik">İster Ekle</div><span class="modal-close" onclick="mc('m-ister')">✕</span></div>
+    <div id="mi-alert"></div>
+    <div class="fg">
+      <label class="fl">Tür</label>
+      <div style="display:flex;gap:12px">
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px"><input type="radio" name="mi-tip" value="G" id="mi-tipg" checked style="width:auto" onchange="miTipDegis()"> Gereksinim (g...)</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px"><input type="radio" name="mi-tip" value="B" id="mi-tipb" style="width:auto" onchange="miTipDegis()"> Başlık (b...)</label>
+      </div>
+    </div>
+    <div class="fg" id="mi-baslik-grup">
+      <label class="fl">Bağlı Olduğu Başlık (opsiyonel)</label>
+      <select id="mi-baslik-sec"><option value="">Başlıksız (kök seviye)</option></select>
+    </div>
+    <div class="fg">
+      <label class="fl">Havuz Kodu</label>
+      <div style="display:flex;gap:6px">
+        <input type="text" id="mi-kod" placeholder="Boş bırakılırsa otomatik atanır" style="flex:1">
+        <button class="btn btn-ghost btn-sm" onclick="otomatikKod()">Otomatik</button>
+      </div>
+    </div>
+    <div class="fg">
+      <label class="fl">Numara</label>
+      <div style="display:flex;gap:6px">
+        <input type="text" id="mi-numara" placeholder="Girmek zorunda değilsiniz" style="flex:1">
+        <button class="btn btn-ghost btn-sm" onclick="otomatikNumara()">Otomatik</button>
+      </div>
+    </div>
+    <div class="fg"><label class="fl">Üst İster (direkt parent)</label><select id="mi-parent" onchange="miParentDegis()"><option value="">Kök seviye</option></select></div>
+    <div class="fg"><label class="fl">Seviye</label><select id="mi-seviye" onchange="miSeviyeDegis()"></select></div>
+    <div class="fg"><label class="fl">Konfigürasyon</label><select id="mi-konfig"><option value="">Seçin...</option></select></div>
+    <div class="fg"><label class="fl">İçerik</label><textarea id="mi-icerik" rows="4"></textarea></div>
+    <div class="fg" id="mi-yontemi-g" style="display:none">
+      <label class="fl">Test Yöntemi</label>
+      <select id="mi-yontemi"><option value="">Seçin...</option></select>
+    </div>
+    <input type="hidden" id="mi-nid">
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="mc('m-ister')">İptal</button>
+      <button class="btn btn-primary" onclick="isterKaydet()">Kaydet</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOPLU UPLOAD MODAL -->
+<div class="modal-overlay" id="m-upload">
+  <div class="modal" style="max-width:580px">
+    <div class="modal-hd"><div class="modal-title">Toplu İster Yükle</div><span class="modal-close" onclick="mc('m-upload')">✕</span></div>
+    <div class="fg">
+      <label class="fl">Tür</label>
+      <div style="display:flex;gap:12px">
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px"><input type="radio" name="ut-tip" value="G" checked style="width:auto"> Gereksinim</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px"><input type="radio" name="ut-tip" value="B" style="width:auto"> Başlık</label>
+      </div>
+    </div>
+    <div class="fg"><label class="fl">Üst İster</label><select id="ut-parent"><option value="">Kök seviye</option></select></div>
+    <div class="fg"><label class="fl">Seviye</label><select id="ut-seviye"></select></div>
+    <div class="fg"><label class="fl">Her satıra bir ister</label><textarea id="ut-liste" rows="8" placeholder="İster 1&#10;İster 2" oninput="utOnizle()"></textarea></div>
+    <div class="fg"><input type="file" id="ut-dosya" accept=".txt,.csv" onchange="utDosyaOku(this)"></div>
+    <div id="ut-onizleme" style="display:none;font-size:11px;padding:8px;background:var(--bg3);border-radius:5px;max-height:100px;overflow-y:auto;margin-bottom:8px"></div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="mc('m-upload')">İptal</button>
+      <button class="btn btn-primary" onclick="topluYukle()">Yükle</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- TABLO MODAL -->
+<div class="modal-overlay" id="m-tablo">
+  <div class="modal" style="max-width:680px">
+    <div class="modal-hd"><div class="modal-title" id="mt-baslik">Tablo Ekle</div><span class="modal-close" onclick="mc('m-tablo')">✕</span></div>
+    <div class="fg"><label class="fl">Tablo Adı</label><input type="text" id="mt-adi"></div>
+    <div style="display:flex;gap:7px;align-items:center;margin-bottom:8px">
+      <input type="text" id="mt-sutun" placeholder="Sütun adı" style="flex:1">
+      <button class="btn btn-ghost btn-sm" onclick="mtSutunEkle()">+ Sütun</button>
+    </div>
+    <div id="mt-sutunlar" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px"></div>
+    <div id="mt-preview" style="overflow-x:auto;margin-bottom:8px"></div>
+    <button class="btn btn-ghost btn-sm" onclick="mtSatirEkle()">+ Satır</button>
+    <input type="hidden" id="mt-tid">
+    <input type="hidden" id="mt-nid">
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="mc('m-tablo')">İptal</button>
+      <button class="btn btn-primary" onclick="tabloKaydet()">Kaydet</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── STATE ─────────────────────────────────────────────────────────────────
+let nodes=[], seviyeler=[], konfiglar=[], yontemler=[], onaylar={}, gorusSayisi={};
+let havuzPID=null, ctxNID=null, seciliNID=null;
+let mtSutunlar=[], mtSatirlar=[];
+const RENKLER=['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6'];
+
+// ── INIT ──────────────────────────────────────────────────────────────────
+fetch('/api/platform').then(r=>r.json()).then(d=>{
+  const havuzlar=d.filter(p=>p.HavuzMu===1||p.HavuzMu==='1'||p.HavuzMu===true);
+  if(!havuzlar.length){
+    document.getElementById('liste-bos').textContent='Havuz platformu bulunamadı.';return;
+  }
+  if(havuzlar.length>1) fetch('/api/admin/havuz_duzenle',{method:'POST'});
+  havuzPID=havuzlar[0].PlatformID;
+
+  // Seviyeler
+  fetch(`/api/platform/${havuzPID}/seviye`).then(r=>r.json()).then(s=>{
+    seviyeler=s;
+    const svOpts=s.map(sv=>`<option value="${sv.SeviyeID}" data-no="${sv.SeviyeNo}">${sv.SeviyeAdi}</option>`).join('');
+    document.getElementById('mi-seviye').innerHTML=svOpts;
+    document.getElementById('ut-seviye').innerHTML=svOpts;
+    document.getElementById('f-seviye').innerHTML='<option value="">Tüm Seviyeler</option>'+
+      s.map(sv=>`<option value="${sv.SeviyeNo}">${sv.SeviyeAdi}</option>`).join('');
+    miSeviyeDegis();
+  });
+  // Konfigler
+  fetch('/api/konfig').then(r=>r.json()).then(d=>{
+    konfiglar=d;
+    const kOpts='<option value="">Seçin...</option>'+d.map(k=>`<option value="${k.KonfigID}">${k.KonfigAdi}</option>`).join('');
+    document.getElementById('mi-konfig').innerHTML=kOpts;
+    document.getElementById('f-konfig').innerHTML='<option value="">Tüm Konfigler</option>'+d.map(k=>`<option value="${k.KonfigID}">${k.KonfigAdi}</option>`).join('');
+  });
+  // Test yöntemleri
+  fetch('/api/test_yontemi').then(r=>r.json()).then(d=>{
+    yontemler=d;
+    document.getElementById('mi-yontemi').innerHTML='<option value="">Seçin...</option>'+d.map(y=>`<option value="${y.TestYontemiID}">${y.YontemAdi}</option>`).join('');
+  });
+  yukle();
+});
+
+function yukle(){
+  if(!havuzPID)return;
+  Promise.all([
+    fetch(`/api/platform/${havuzPID}/ister_agaci`).then(r=>r.json()),
+    fetch(`/api/rapor/onay_durumu?platform_id=${havuzPID}`).then(r=>r.json())
+  ]).then(([nd,od])=>{
+    nodes=nd;
+    onaylar={};gorusSayisi={};
+    od.forEach(r=>{onaylar[r.NodeID]=r.OnayDurumu;gorusSayisi[r.NodeID]=r.GorusSayisi||0});
+    // Başlık dropdown — SADECE IsterTipi=B olanlar
+    const basliklar=nodes.filter(n=>n.IsterTipi==='B');
+    document.getElementById('f-baslik').innerHTML='<option value="">Tüm Başlıklar</option>'+
+      basliklar.map(n=>`<option value="${n.NodeID}">${n.Icerik?(n.Icerik).substring(0,45):''}</option>`).join('');
+    // Parent dropdown
+    const pOpts='<option value="">Kök seviye</option>'+
+      nodes.map(n=>`<option value="${n.NodeID}">[${n.SeviyeAdi}] ${(n.Icerik||'').substring(0,40)}</option>`).join('');
+    document.getElementById('mi-parent').innerHTML=pOpts;
+    document.getElementById('ut-parent').innerHTML=pOpts;
+    filtrele();
+  });
+}
+
+// ── FİLTRELEME ────────────────────────────────────────────────────────────
+function filtrele(){
+  const kfid=document.getElementById('f-konfig').value;
+  const bFlt=document.getElementById('f-baslik').value;   // NodeID
+  const sFlt=document.getElementById('f-seviye').value;   // SeviyeNo
+  const nFlt=document.getElementById('f-numara').value.trim().toLowerCase();  // NodeNumarasi
+  const kFlt=document.getElementById('f-kod').value.trim().toLowerCase();     // HavuzKodu
+  const mFlt=document.getElementById('f-metin').value.trim().toLowerCase();   // Icerik
+
+  let liste=nodes;
+
+  if(kfid) liste=liste.filter(n=>String(n.KonfigID)===kfid);
+
+  if(bFlt){
+    const bid=parseInt(bFlt);
+    const torunlar=new Set();
+    const ekle=(id)=>{torunlar.add(id);nodes.filter(n=>n.ParentID===id).forEach(c=>ekle(c.NodeID));};
+    ekle(bid);
+    liste=liste.filter(n=>torunlar.has(n.NodeID));
+  }
+
+  if(sFlt) liste=liste.filter(n=>String(n.SeviyeNo)===sFlt);
+
+  if(nFlt||kFlt||mFlt){
+    const eslesIds=new Set();
+    liste.forEach(n=>{
+      let ok=true;
+      if(nFlt&&!(n.NodeNumarasi||'').toLowerCase().includes(nFlt)) ok=false;
+      if(kFlt&&!(n.HavuzKodu||'').toLowerCase().includes(kFlt)) ok=false;
+      if(mFlt&&!(n.Icerik||'').toLowerCase().includes(mFlt)) ok=false;
+      if(ok) eslesIds.add(n.NodeID);
+    });
+    const ekleAta=(nid)=>{
+      const nd=nodes.find(n=>n.NodeID===nid);
+      if(nd&&nd.ParentID&&!eslesIds.has(nd.ParentID)){eslesIds.add(nd.ParentID);ekleAta(nd.ParentID);}
+    };
+    eslesIds.forEach(id=>ekleAta(id));
+    liste=liste.filter(n=>eslesIds.has(n.NodeID));
+  }
+
+  // Filtre göstergesi
+  const aktif=[kfid,bFlt,sFlt,nFlt,kFlt,mFlt].filter(Boolean);
+  const aktifEl=document.getElementById('f-aktif');
+  const temizEl=document.getElementById('f-temizle');
+  if(aktif.length){aktifEl.style.display='inline';aktifEl.textContent=`${aktif.length} filtre · ${liste.length} sonuç`;temizEl.style.display='inline-flex';}
+  else{aktifEl.style.display='none';temizEl.style.display='none';}
+
+  document.getElementById('liste-bos').style.display='none';
+  const listeIds=new Set(liste.map(n=>n.NodeID));
+  const roots=liste.filter(n=>!n.ParentID||!listeIds.has(n.ParentID));
+  const el=document.getElementById('liste-icerik');
+  if(!roots.length){el.innerHTML='<div class="empty">İster bulunamadı</div>';return;}
+  el.innerHTML=roots.map(n=>renderKutu(n,liste)).join('');
+  nodes.forEach(n=>{yukleTabloları(n.NodeID);yukleButonlar(n.NodeID);});
+}
+
+function filtreleriTemizle(){
+  ['f-konfig','f-baslik','f-seviye'].forEach(id=>document.getElementById(id).value='');
+  ['f-numara','f-kod','f-metin'].forEach(id=>document.getElementById(id).value='');
+  filtrele();
+}
+
+// ── KUTU RENDER ───────────────────────────────────────────────────────────
+function kutuRenk(nid){
+  if(onaylar[nid]) return 'yesil';
+  if(gorusSayisi[nid]>0) return 'sari';
+  return 'renksiz';
+}
+
+function vurgula(t){
+  const f=document.getElementById('f-metin').value.trim();
+  if(!f||!t) return t||'';
+  const re=new RegExp(`(${f.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`,'gi');
+  return t.replace(re,'<mark>$1</mark>');
+}
+
+function renderKutu(node,liste){
+  const ch=(liste||nodes).filter(n=>n.ParentID===node.NodeID);
+  const renk=kutuRenk(node.NodeID);
+  const onay=onaylar[node.NodeID]||0;
+  const gSay=gorusSayisi[node.NodeID]||0;
+  const isBaslik=node.IsterTipi==='B';
+  const sColors=[['#dbeafe','#1d4ed8'],['#dcfce7','#15803d'],['#f3e8ff','#6d28d9'],['#fef3c7','#92400e']];
+  const [bg,fg]=sColors[((node.SeviyeNo||1)-1)%sColors.length];
+
+  return `<div class="ik ${renk}" id="ik-${node.NodeID}" oncontextmenu="ctxAc(event,${node.NodeID})">
+    <div class="ik-row">
+      <div class="tik ${onay?'on':''}" onclick="tikToggle(${node.NodeID})">${onay?'✓':''}</div>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:3px">
+          <div style="width:14px;height:14px;border-radius:3px;background:${bg};color:${fg};display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;flex-shrink:0">${(node.SeviyeAdi||'?')[0]}</div>
+          <span style="font-size:9px;color:var(--text3)">${node.SeviyeAdi||''}</span>
+          ${isBaslik?`<span style="font-size:9px;font-weight:700;color:var(--amber)">BAŞLIK</span>`:''}
+          ${node.NodeNumarasi?`<span class="nb">${node.NodeNumarasi}</span>`:''}
+          ${node.HavuzKodu?`<span class="${isBaslik?'kb-b':'kb-g'}">${node.HavuzKodu}</span>`:''}
+          ${node.KonfigAdi?`<span style="font-size:9px;color:var(--text3)">${node.KonfigAdi}</span>`:''}
+          ${gSay>0?`<span style="font-size:9px;background:var(--amber-bg);color:var(--amber);padding:1px 5px;border-radius:10px;border:1px solid var(--amber-border);cursor:pointer" onclick="gorusleriToggle(${node.NodeID})">${gSay} görüş ▾</span>`:''}
+        </div>
+        <div style="font-size:12px;line-height:1.6;cursor:pointer;${isBaslik?'font-weight:600;':''}" onclick="secDetay(${node.NodeID})">${vurgula(node.Icerik)||'(boş)'}</div>
+        <div id="it-${node.NodeID}"></div>
+        <div id="ib-${node.NodeID}"></div>
+        <div id="ig-${node.NodeID}" data-y="0"></div>
+        <div style="display:flex;gap:3px;flex-wrap:wrap;margin-top:5px">
+          <button class="bm" onclick="siralaDegis(${node.NodeID},'yukari')">↑</button>
+          <button class="bm" onclick="siralaDegis(${node.NodeID},'asagi')">↓</button>
+          <button class="bm" onclick="yeniIsterModal(${node.NodeID},'G','alt')">+ Alt Gereksinim</button>
+          <button class="bm" onclick="yeniIsterModal(${node.NodeID},'B','alt')">+ Alt Başlık</button>
+          <button class="bm" onclick="bulletEkle(${node.NodeID})">• Bullet Ekle</button>
+          <button class="bm" onclick="tabloModal(${node.NodeID})">+ Tablo</button>
+          <button class="bm" onclick="duzModal(${node.NodeID})">✎</button>
+          <button class="bm d" onclick="isterSil(${node.NodeID})">✕</button>
+        </div>
+      </div>
+    </div>
+    ${ch.length?`<div class="indent">${ch.map(c=>renderKutu(c,liste)).join('')}</div>`:''}
+  </div>`;
+}
+
+// ── TABLO YÜKLE ───────────────────────────────────────────────────────────
+function yukleTabloları(nid){
+  fetch(`/api/ister_tablo/${nid}`).then(r=>r.json()).then(list=>{
+    const el=document.getElementById(`it-${nid}`);
+    if(!el) return;
+    if(!list.length) { el.innerHTML = ''; return; }
+
+    el.innerHTML=list.map(t=>{
+      let s=[], r=[];
+      try{s=typeof t.SutunBasliklari==='string'?JSON.parse(t.SutunBasliklari):t.SutunBasliklari||[];}catch(e){}
+      try{r=typeof t.Satirlar==='string'?JSON.parse(t.Satirlar):t.Satirlar||[];}catch(e){}
+      if(!s.length) return '';
+
+      return `
+        <div class="it-wrap" style="position:relative; margin-bottom:15px; border:1px solid var(--border2); padding:8px; border-radius:4px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px">
+            <div style="font-size:11px; font-weight:600; color:var(--text2)">${t.TabloAdi || 'Adsız Tablo'}</div>
+            <div style="display:flex; gap:8px">
+              <span onclick='tabloDuzenleModal(${JSON.stringify(t)})' style="cursor:pointer; font-size:12px; color:var(--blue)">✎</span>
+              <span onclick="tabloSil(${t.TabloID}, ${nid})" style="cursor:pointer; font-size:12px; color:var(--red)">✕</span>
+            </div>
+          </div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead><tr>${s.map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+              <tbody>${r.map(row=>`<tr>${s.map((_,i)=>`<td>${row[i]||''}</td>`).join('')}</tr>`).join('')}</tbody>
+            </table>
+          </div>
+        </div>`;
+    }).join('');
+  }).catch(()=>{});
+}
+
+function tabloSil(tid, nid) {
+    if(!confirm('Bu tabloyu silmek istediğinize emin misiniz?')) return;
+    fetch(`/api/ister_tablo/${tid}`, { method: 'DELETE' })
+    .then(() => yukleTabloları(nid));
+}
+
+function tabloKaydet() {
+    const nid = parseInt(document.getElementById('mt-nid').value);
+    const tid = document.getElementById('mt-tid').value;
+    const adi = document.getElementById('mt-adi').value;
+
+    // Eğer tid varsa URL'ye ID ekle ve metodu PUT yap
+    const url = tid ? `/api/ister_tablo/${tid}` : '/api/ister_tablo';
+    const method = tid ? 'PUT' : 'POST';
+
+    // Preview'daki inputlardan güncel verileri çek
+    const inputs = document.querySelectorAll('#mt-preview input');
+    let idx = 0;
+    mtSatirlar.forEach((r, si) => {
+        mtSutunlar.forEach((_, ci) => {
+            if (inputs[idx]) mtSatirlar[si][ci] = inputs[idx].value;
+            idx++;
+        });
+    });
+
+    fetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            NodeID: nid,
+            TabloAdi: adi,
+            SutunBasliklari: mtSutunlar,
+            Satirlar: mtSatirlar
+        })
+    })
+    .then(r => r.json())
+    .then(() => {
+        mc('m-tablo'); 
+        yukleTabloları(nid);
+        document.getElementById('mt-tid').value = '';
+    });
+}
+
+function tabloDuzenleModal(t) {
+    document.getElementById('mt-tid').value = t.TabloID;
+    document.getElementById('mt-nid').value = t.NodeID;
+    document.getElementById('mt-adi').value = t.TabloAdi;
+    document.getElementById('mt-baslik').innerHTML = 'Tablo Güncelle';
+    mtSutunlar = typeof t.SutunBasliklari === 'string' ? JSON.parse(t.SutunBasliklari) : t.SutunBasliklari;
+    mtSatirlar = typeof t.Satirlar === 'string' ? JSON.parse(t.Satirlar) : t.Satirlar;
+    renderMtPreview();
+    document.getElementById('m-tablo').classList.add('on');
+}
+
+function tabloModal(nid) {
+    document.getElementById('mt-baslik').innerHTML = 'Tablo Ekle';
+    document.getElementById('mt-tid').value = ''; 
+    document.getElementById('mt-nid').value = nid;
+    document.getElementById('mt-adi').value = '';
+    mtSutunlar = [];
+    mtSatirlar = [];
+    mtTabloID = null; 
+    renderMtPreview();
+    document.getElementById('m-tablo').classList.add('on');
+}
+
+// ── TABLO ─────────────────────────────────────────────────────────────────
+function mtSutunEkle(){const v=document.getElementById('mt-sutun').value.trim();if(!v)return;mtSutunlar.push(v);mtSatirlar=mtSatirlar.map(r=>[...r,'']);document.getElementById('mt-sutun').value='';renderMtPreview();}
+function mtSatirEkle(){mtSatirlar.push(mtSutunlar.map(()=>''));renderMtPreview();}
+function mtSutunSil(i){mtSutunlar.splice(i,1);mtSatirlar=mtSatirlar.map(r=>{r.splice(i,1);return r;});renderMtPreview();}
+function mtHucre(si,ci,v){if(mtSatirlar[si])mtSatirlar[si][ci]=v;}
+function renderMtPreview(){
+  document.getElementById('mt-sutunlar').innerHTML=mtSutunlar.map((s,i)=>`<span style="padding:2px 7px;background:var(--bg3);border:1px solid var(--border2);border-radius:3px;font-size:11px;display:inline-flex;align-items:center;gap:3px">${s}<span onclick="mtSutunSil(${i})" style="cursor:pointer;color:var(--red)">✕</span></span>`).join('');
+  const p=document.getElementById('mt-preview');
+  if(!mtSutunlar.length){p.innerHTML='';return;}
+  let h=`<table style="border-collapse:collapse;width:100%;font-size:11px"><thead><tr>${mtSutunlar.map(s=>`<th style="padding:4px 7px;background:var(--bg3);border:1px solid var(--border2)">${s}</th>`).join('')}</tr></thead><tbody>`;
+  mtSatirlar.forEach((r,si)=>{h+=`<tr>${mtSutunlar.map((_,ci)=>`<td style="padding:2px;border:1px solid var(--border2)"><input type="text" value="${(r[ci]||'').replace(/"/g,'&quot;')}" onchange="mtHucre(${si},${ci},this.value)" style="border:none;background:transparent;width:100%;font-size:11px;padding:3px;outline:none"></td>`).join('')}</tr>`;});
+  h+='</tbody></table>';p.innerHTML=h;
+}
+// ── GÖRÜŞLER ──────────────────────────────────────────────────────────────
+function gorusleriToggle(nid){
+  const el=document.getElementById(`ig-${nid}`);if(!el)return;
+  if(el.dataset.y==='1'){el.innerHTML='';el.dataset.y='0';return;}
+  fetch(`/api/firma_gorusu/${nid}?platform_id=${havuzPID}`).then(r=>r.json()).then(list=>{
+    el.dataset.y='1';
+    if(!list.length){el.innerHTML='<div style="font-size:11px;color:var(--text3);padding:6px">Henüz görüş yok.</div>';return;}
+    el.innerHTML=list.map((g,i)=>{
+      const renk=RENKLER[i%RENKLER.length];
+      const yanitlar=g.yanitlar.map(y=>`<div style="margin-top:5px;padding:5px 7px;background:var(--bg2);border-radius:4px;border-left:3px solid var(--accent)"><div style="font-size:9px;color:var(--text3)">${y.YazanAdi||'—'} · ${y.OlusturmaTarihi}</div><div style="font-size:11px">${y.YanitIcerik}</div></div>`).join('');
+      return `<div style="margin-top:7px;padding:9px;background:var(--bg3);border-radius:5px;border-left:3px solid ${renk}">
+        <div style="display:flex;justify-content:space-between">
+          <span style="font-size:11px;font-weight:600;color:${renk}">${g.FirmaAdi}</span>
+          <span style="font-size:9px;color:var(--text3)">${g.OlusturmaTarihi}</span>
+        </div>
+        ${g.GorusOzet?`<div style="font-size:11px;color:var(--text2);font-style:italic;margin-top:3px">"${g.GorusOzet}"</div>`:''}
+        <div style="font-size:12px;margin-top:4px">${g.GorusIcerik}</div>
+        ${yanitlar}
+        <div style="display:flex;gap:5px;margin-top:7px">
+          <input type="text" id="yr-${g.GorusID}" placeholder="Yanıt..." style="flex:1;font-size:11px;padding:4px 7px">
+          <button class="bm" onclick="yanitKaydet(${g.GorusID},${nid})">Yanıtla</button>
+        </div>
+      </div>`;
+    }).join('');
+  });
+}
+
+// ── ONAY TİKİ ─────────────────────────────────────────────────────────────
+function tikToggle(nid){
+  const yeni=onaylar[nid]?0:1;
+  fetch('/api/ister_onay',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({NodeID:nid,PlatformID:havuzPID,OnayDurumu:yeni})})
+  .then(()=>{
+    onaylar[nid]=yeni;
+    const kutu=document.getElementById(`ik-${nid}`);
+    if(kutu){kutu.className=`ik ${kutuRenk(nid)}`;const t=kutu.querySelector('.tik');if(t){t.className=`tik ${yeni?'on':''}`;t.textContent=yeni?'✓':''}}
+  });
+}
+
+// ── DETAY ─────────────────────────────────────────────────────────────────
+function secDetay(nid){
+  seciliNID=nid;
+  const nd=nodes.find(n=>n.NodeID===nid);if(!nd)return;
+  const ch=nodes.filter(n=>n.ParentID===nid);
+  document.getElementById('detay-bos').style.display='none';
+  const d=document.getElementById('detay-icerik');d.style.display='block';
+  d.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+      <div>
+        <div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;flex-wrap:wrap">
+          <b>${nd.SeviyeAdi}</b>
+          ${nd.IsterTipi==='B'?`<span style="font-size:10px;font-weight:700;color:var(--amber)">BAŞLIK</span>`:''}
+          ${nd.NodeNumarasi?`<span class="nb" style="font-size:11px">${nd.NodeNumarasi}</span>`:''}
+          ${nd.HavuzKodu?`<span class="${nd.IsterTipi==='B'?'kb-b':'kb-g'}" style="font-size:11px">${nd.HavuzKodu}</span>`:''}
+        </div>
+        <div style="font-size:10px;color:var(--text3)">#${nd.NodeID}</div>
+      </div>
+      <div style="display:flex;gap:4px">
+        <button class="bm" onclick="duzModal(${nd.NodeID})">✎ Düzenle</button>
+        <button class="bm d" onclick="isterSil(${nd.NodeID})">✕ Sil</button>
+      </div>
+    </div>
+    <div style="padding:11px;background:var(--bg3);border-radius:6px;font-size:12px;line-height:1.7;margin-bottom:10px">${nd.Icerik||'(boş)'}</div>
+    ${nd.TestYontemiAdi?`<div style="padding:5px 9px;background:var(--bg3);border-radius:4px;font-size:11px;display:inline-flex;gap:5px;margin-bottom:9px"><span style="color:var(--text3)">Test Yöntemi:</span><b>${nd.TestYontemiAdi}</b></div>`:''}
+    ${ch.length?`<div style="margin-top:10px"><div style="font-size:10px;font-weight:600;color:var(--text3);margin-bottom:5px">${ch.length} ALT İSTER</div>
+    ${ch.map(c=>`<div onclick="secDetay(${c.NodeID})" style="padding:6px 9px;background:var(--bg3);border-radius:4px;margin-bottom:3px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:5px">
+      ${c.NodeNumarasi?`<span class="nb">${c.NodeNumarasi}</span>`:''}
+      ${c.HavuzKodu?`<span class="${c.IsterTipi==='B'?'kb-b':'kb-g'}">${c.HavuzKodu}</span>`:''}
+      <span>${c.Icerik||'(boş)'}</span>
+    </div>`).join('')}</div>`:''}`;
+}
+
+// ── SAĞ TIK ───────────────────────────────────────────────────────────────
+function ctxAc(e,nid){
+  e.preventDefault();e.stopPropagation();
+  ctxNID=nid;
+  const m=document.getElementById('ctx');
+  m.style.display='block';
+  m.style.left=Math.min(e.clientX,window.innerWidth-190)+'px';
+  m.style.top=Math.min(e.clientY,window.innerHeight-150)+'px';
+}
+document.addEventListener('click',()=>document.getElementById('ctx').style.display='none');
+function ctxYeniGereksinim(){yeniIsterModal(ctxNID,'G','alt')}
+function ctxYeniBaslik(){yeniIsterModal(ctxNID,'B','alt')}
+function ctxBullet(){bulletEkle(ctxNID)}
+function ctxSiraYukari(){siralaDegis(ctxNID,'yukari')}
+function ctxSiraAsagi(){siralaDegis(ctxNID,'asagi')}
+function ctxDuzenle(){duzModal(ctxNID)}
+function ctxSil(){isterSil(ctxNID)}
+
+// ── BULLET ────────────────────────────────────────────────────────────────
+function bulletEkle(nodeId){
+  const icerik=prompt('Bullet içeriği:');
+  if(!icerik||!icerik.trim())return;
+  fetch('/api/ister_bullet',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({NodeID:nodeId,Icerik:icerik.trim()})})
+  .then(()=>yukleButonlar(nodeId));
+}
+
+function yukleButonlar(nodeId){
+  fetch(`/api/ister_bullet/${nodeId}`).then(r=>r.json()).then(list=>{
+    const el=document.getElementById(`ib-${nodeId}`);
+    if(!el)return;
+    if(!list.length){el.innerHTML='';return;}
+    el.innerHTML=`<div style="margin-top:7px;padding:8px 10px;background:var(--bg4);border-radius:5px;border-left:3px solid var(--border2)">
+      <div style="font-size:9px;font-weight:600;color:var(--text3);margin-bottom:5px;text-transform:uppercase">Maddeler</div>
+      ${list.map(b=>`<div style="display:flex;align-items:flex-start;gap:6px;padding:3px 0;border-bottom:1px solid var(--border)" id="bullet-${b.BulletID}">
+        <span style="color:var(--text3);font-size:12px;margin-top:1px;flex-shrink:0">•</span>
+        <div style="flex:1;font-size:12px;line-height:1.5" id="bullet-txt-${b.BulletID}">${b.Icerik}</div>
+        <div style="display:flex;gap:2px;flex-shrink:0">
+          <button class="bm" style="padding:1px 5px;font-size:10px" onclick="bulletDuz(${b.BulletID},${nodeId})">✎</button>
+          <button class="bm" style="padding:1px 5px;font-size:10px" onclick="bulletSirala(${b.BulletID},'yukari',${nodeId})">↑</button>
+          <button class="bm" style="padding:1px 5px;font-size:10px" onclick="bulletSirala(${b.BulletID},'asagi',${nodeId})">↓</button>
+          <button class="bm d" style="padding:1px 5px;font-size:10px" onclick="bulletSilBtn(${b.BulletID},${nodeId})">✕</button>
+        </div>
+      </div>`).join('')}
+      <button class="bm" style="margin-top:6px;font-size:10px" onclick="bulletEkle(${nodeId})">+ Madde Ekle</button>
+    </div>`;
+  });
+}
+
+function bulletDuz(bid,nodeId){
+  const mevcut=document.getElementById(`bullet-txt-${bid}`)?.textContent||'';
+  const yeni=prompt('Bullet düzenle:',mevcut);
+  if(!yeni||!yeni.trim())return;
+  fetch(`/api/ister_bullet/${bid}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({Icerik:yeni.trim()})})
+  .then(()=>yukleButonlar(nodeId));
+}
+
+function bulletSilBtn(bid,nodeId){
+  if(!confirm('Bu bullet silinecek?'))return;
+  fetch(`/api/ister_bullet/${bid}`,{method:'DELETE'}).then(()=>yukleButonlar(nodeId));
+}
+
+function bulletSirala(bid,yon,nodeId){
+  fetch('/api/ister_bullet/siralama',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({BulletID:bid,Yon:yon})})
+  .then(()=>yukleButonlar(nodeId));
+}
+
+// ── SIRALAMA ──────────────────────────────────────────────────────────────
+function siralaDegis(nid,yon){
+  fetch('/api/ister_node/siralama',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({NodeID:nid,Yon:yon})})
+  .then(()=>yukle());
+}
+
+// ── YENİ İSTER MODAL ──────────────────────────────────────────────────────
+function yeniIsterModal(parentId,tip,mod){
+  tip=tip||'G';mod=mod||'yeni';
+  document.getElementById('mi-baslik').textContent=mod==='ayni-seviye'?'Aynı Seviyeye Ekle':'İster Ekle';
+  document.getElementById('mi-nid').value='';
+  document.getElementById('mi-icerik').value='';
+  document.getElementById('mi-numara').value='';
+  document.getElementById('mi-kod').value='';
+  document.getElementById('mi-alert').innerHTML='';
+  document.getElementById(tip==='B'?'mi-tipb':'mi-tipg').checked=true;
+  miTipDegis();
+  // Başlık listesi
+  const basliklar=nodes.filter(n=>n.IsterTipi==='B');
+  document.getElementById('mi-baslik-sec').innerHTML='<option value="">Başlıksız (kök seviye)</option>'+
+    basliklar.map(n=>`<option value="${n.NodeID}">${n.NodeNumarasi?n.NodeNumarasi+' ':''} ${(n.Icerik||'').substring(0,45)}</option>`).join('');
+  // Parent dropdown
+  const pOpts='<option value="">Kök seviye</option>'+nodes.map(n=>`<option value="${n.NodeID}">[${n.SeviyeAdi}] ${(n.Icerik||'').substring(0,40)}</option>`).join('');
+  document.getElementById('mi-parent').innerHTML=pOpts;
+  if(parentId){
+    document.getElementById('mi-parent').value=parentId;
+    const p=nodes.find(n=>n.NodeID===parentId);
+    if(p){
+      const hedefNo=mod==='ayni-seviye'?p.SeviyeNo:p.SeviyeNo+1;
+      const altSev=seviyeler.find(s=>s.SeviyeNo===hedefNo);
+      if(altSev)document.getElementById('mi-seviye').value=altSev.SeviyeID;
+    }
+  }else{
+    document.getElementById('mi-parent').value='';
+    const ilk=seviyeler.find(s=>s.SeviyeNo===1);
+    if(ilk)document.getElementById('mi-seviye').value=ilk.SeviyeID;
+  }
+  miSeviyeDegis();
+  document.getElementById('m-ister').classList.add('on');
+  setTimeout(()=>document.getElementById('mi-icerik').focus(),100);
+}
+
+function miTipDegis(){
+  const tip=document.querySelector('input[name="mi-tip"]:checked')?.value||'G';
+  document.getElementById('mi-baslik-grup').style.display=tip==='G'?'block':'none';
+}
+
+function miParentDegis(){
+  const pid=parseInt(document.getElementById('mi-parent').value)||null;
+  if(pid){
+    const p=nodes.find(n=>n.NodeID===pid);
+    if(p){const altSev=seviyeler.find(s=>s.SeviyeNo===p.SeviyeNo+1);if(altSev){document.getElementById('mi-seviye').value=altSev.SeviyeID;miSeviyeDegis();}}
+  }
+}
+
+function otomatikKod(){
+  const tip=document.querySelector('input[name="mi-tip"]:checked')?.value||'G';
+  const prefix=tip==='B'?'b':'g';
+  const mevcutlar=nodes.filter(n=>n.IsterTipi===tip&&(n.HavuzKodu||'').startsWith(prefix));
+  let maxNo=0;
+  mevcutlar.forEach(n=>{const no=parseInt((n.HavuzKodu||'').replace(prefix,''))||0;if(no>maxNo)maxNo=no;});
+  document.getElementById('mi-kod').value=`${prefix}${maxNo+1}`;
+}
+
+function miSeviyeDegis(){
+  const sel=document.getElementById('mi-seviye');
+  const no=parseInt(sel.selectedOptions[0]?.dataset.no||0);
+  const maxNo=Math.max(...(seviyeler.map(s=>s.SeviyeNo)||[2]));
+  document.getElementById('mi-yontemi-g').style.display=no===maxNo?'block':'none';
+}
+
+function otomatikNumara(){
+  const pid=parseInt(document.getElementById('mi-parent').value)||null;
+  fetch(`/api/gign/sonraki_numara?platform_id=${havuzPID}`+(pid?`&parent_id=${pid}`:'')).then(r=>r.json()).then(d=>{
+    document.getElementById('mi-numara').value=d.numara||'';
+  });
+}
+
+function isterKaydet(){
+  const icerik=document.getElementById('mi-icerik').value.trim();
+  if(!icerik){document.getElementById('mi-alert').innerHTML='<div class="alert alert-err">İçerik zorunludur.</div>';return;}
+  const nid=parseInt(document.getElementById('mi-nid').value)||0;
+  const tip=document.querySelector('input[name="mi-tip"]:checked')?.value||'G';
+  let parentId=parseInt(document.getElementById('mi-parent').value)||null;
+  if(!parentId&&tip==='G'){
+    const bs=parseInt(document.getElementById('mi-baslik-sec').value)||null;
+    if(bs)parentId=bs;
+  }
+  const body={
+    PlatformID:havuzPID,
+    SeviyeID:parseInt(document.getElementById('mi-seviye').value),
+    ParentID:parentId,
+    KonfigID:parseInt(document.getElementById('mi-konfig').value)||null,
+    Icerik:icerik,
+    NodeNumarasi:document.getElementById('mi-numara').value.trim(),
+    HavuzKodu:document.getElementById('mi-kod').value.trim(),
+    TestYontemiID:parseInt(document.getElementById('mi-yontemi').value)||null,
+    IsterTipi:tip
+  };
+  if(nid){
+    fetch(`/api/ister_node/${nid}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+    .then(()=>{mc('m-ister');yukle();});
+  } else {
+    fetch('/api/ister_node',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+    .then(r=>r.json()).then(d=>{if(d.hata){document.getElementById('mi-alert').innerHTML=`<div class="alert alert-err">${d.hata}</div>`;return;}mc('m-ister');yukle();});
+  }
+}
+
+// ── DÜZENLE ───────────────────────────────────────────────────────────────
+function duzModal(nid){
+  const nd=nodes.find(n=>n.NodeID===nid);if(!nd)return;
+  document.getElementById('mi-baslik').textContent='İster Düzenle';
+  document.getElementById('mi-nid').value=nid;
+  document.getElementById('mi-icerik').value=nd.Icerik||'';
+  document.getElementById('mi-numara').value=nd.NodeNumarasi||'';
+  document.getElementById('mi-kod').value=nd.HavuzKodu||'';
+  document.getElementById('mi-seviye').value=nd.SeviyeID||'';
+  document.getElementById('mi-konfig').value=nd.KonfigID||'';
+  document.getElementById('mi-yontemi').value=nd.TestYontemiID||'';
+  document.getElementById(nd.IsterTipi==='B'?'mi-tipb':'mi-tipg').checked=true;
+  document.getElementById('mi-parent').value=nd.ParentID||'';
+  document.getElementById('mi-alert').innerHTML='';
+  miSeviyeDegis();
+  document.getElementById('m-ister').classList.add('on');
+}
+
+// ── SİL ───────────────────────────────────────────────────────────────────
+function isterSil(nid){
+  if(!confirm('Bu ister ve tüm alt isterleri silinecek. Devam?'))return;
+  fetch(`/api/ister_node/${nid}`,{method:'DELETE'}).then(r=>r.json()).then(d=>{
+    if(d.hata){alert(d.hata);return;}
+    if(seciliNID===nid){document.getElementById('detay-bos').style.display='block';document.getElementById('detay-icerik').style.display='none';seciliNID=null;}
+    yukle();
+  });
+}
+
+function yanitKaydet(gid,nid){
+  const inp=document.getElementById(`yr-${gid}`);const v=inp.value.trim();if(!v)return;
+  fetch(`/api/firma_gorusu/${gid}/yanit`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({YanitIcerik:v})})
+  .then(()=>{const el=document.getElementById(`ig-${nid}`);if(el)el.dataset.y='0';inp.value='';gorusleriToggle(nid);});
+}
+// ── TOPLU UPLOAD ──────────────────────────────────────────────────────────
+function topluUploadAc(){document.getElementById('ut-liste').value='';document.getElementById('ut-onizleme').style.display='none';document.getElementById('m-upload').classList.add('on');}
+function utDosyaOku(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=e=>{document.getElementById('ut-liste').value=e.target.result.trim();utOnizle();};r.readAsText(f,'UTF-8');inp.value='';}
+function utOnizle(){const s=document.getElementById('ut-liste').value.trim().split('\n').filter(x=>x.trim());const el=document.getElementById('ut-onizleme');if(!s.length){el.style.display='none';return;}el.style.display='block';el.innerHTML=`<b>${s.length} ister:</b><br>`+s.map((x,i)=>`${i+1}. ${x}`).join('<br>');}
+function topluYukle(){
+  const s=document.getElementById('ut-liste').value.trim().split('\n').filter(x=>x.trim());
+  if(!s.length){alert('Liste boş.');return;}
+  const sevID=parseInt(document.getElementById('ut-seviye').value);
+  const pid=parseInt(document.getElementById('ut-parent').value)||null;
+  const tip=document.querySelector('input[name="ut-tip"]:checked')?.value||'G';
+  fetch('/api/toplu_upload',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({platform_id:havuzPID,seviye_id:sevID,parent_id:pid,ister_tipi:tip,isterler:s})})
+  .then(r=>r.json()).then(d=>{if(d.hata){alert(d.hata);return;}alert(`${d.toplam} ister eklendi.`);mc('m-upload');yukle();});
+}
+
+// ── EXPORT ────────────────────────────────────────────────────────────────
+function exportListe(){
+  // Mevcut filtrelenmiş listeyi export et
+  const kfid=document.getElementById('f-konfig').value;
+  const bFlt=document.getElementById('f-baslik').value;
+  const sFlt=document.getElementById('f-seviye').value;
+  const nFlt=document.getElementById('f-numara').value.trim().toLowerCase();
+  const kFlt=document.getElementById('f-kod').value.trim().toLowerCase();
+  const mFlt=document.getElementById('f-metin').value.trim().toLowerCase();
+  let liste=nodes;
+  if(kfid)liste=liste.filter(n=>String(n.KonfigID)===kfid);
+  if(bFlt){const bid=parseInt(bFlt);const tr=new Set();const e=(id)=>{tr.add(id);nodes.filter(n=>n.ParentID===id).forEach(c=>e(c.NodeID));};e(bid);liste=liste.filter(n=>tr.has(n.NodeID));}
+  if(sFlt)liste=liste.filter(n=>String(n.SeviyeNo)===sFlt);
+  if(nFlt||kFlt||mFlt){const ids=new Set();liste.forEach(n=>{let ok=true;if(nFlt&&!(n.NodeNumarasi||'').toLowerCase().includes(nFlt))ok=false;if(kFlt&&!(n.HavuzKodu||'').toLowerCase().includes(kFlt))ok=false;if(mFlt&&!(n.Icerik||'').toLowerCase().includes(mFlt))ok=false;if(ok)ids.add(n.NodeID);});const ea=(nid)=>{const nd=nodes.find(n=>n.NodeID===nid);if(nd&&nd.ParentID&&!ids.has(nd.ParentID)){ids.add(nd.ParentID);ea(nd.ParentID);}};ids.forEach(id=>ea(id));liste=liste.filter(n=>ids.has(n.NodeID));}
+  let csv='\uFEFF';csv+='Numara,Havuz Kodu,Tür,Seviye,Konfig,İçerik\n';
+  liste.forEach(r=>{csv+=`"${r.NodeNumarasi||''}","${r.HavuzKodu||''}","${r.IsterTipi==='B'?'Başlık':'Gereksinim'}","${r.SeviyeAdi||''}","${r.KonfigAdi||''}","${(r.Icerik||'').replace(/"/g,'""')}"\n`;});
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='havuz_isterler.csv';a.click();
+}
+
+// ── YARDIMCI ──────────────────────────────────────────────────────────────
+function mc(id){document.getElementById(id).classList.remove('on');}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){document.getElementById('ctx').style.display='none';document.querySelectorAll('.modal-overlay.on').forEach(m=>m.classList.remove('on'));}});
+</script>
+{% endblock %}

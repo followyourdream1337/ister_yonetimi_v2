@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+{% block title %}Platformlar{% endblock %}
+{% block page_title %}Platformlar{% endblock %}
+{% block page_sub %}Tanımlar{% endblock %}
+{% block topbar_actions %}<button class="btn btn-primary" onclick="yeniPlatformModal()">+ Yeni Platform</button>{% endblock %}
+
+{% block content %}
+<div style="display:grid;grid-template-columns:260px 1fr;gap:14px;height:calc(100vh - 110px)">
+  <!-- Sol: Platform listesi -->
+  <div class="card" style="overflow-y:auto">
+    <div class="card-hd"><div class="card-title">Platformlar</div></div>
+    <div id="platform-liste"></div>
+  </div>
+  <!-- Sağ: Seçili platform ayarları -->
+  <div id="platform-detay" style="display:none">
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
+      <div style="font-size:15px;font-weight:500" id="detay-baslik"></div>
+    </div>
+    <div class="tabs">
+      <div class="tab on" onclick="tabSec(0)">Konfigürasyonlar</div>
+      <div class="tab" onclick="tabSec(1)">Seviyeler</div>
+      <div class="tab" onclick="tabSec(2)">Test Aşamaları</div>
+    </div>
+    <!-- Konfig sekmesi -->
+    <div id="tab-0">
+      <div class="card" style="margin-bottom:10px">
+        <div id="konfig-checkboxlar" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px"></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" onclick="konfigKaydet()">Kaydet</button>
+          <button class="btn btn-primary btn-sm" onclick="isterSetiOlustur()">İster Seti Oluştur</button>
+        </div>
+        <div id="konfig-alert" style="margin-top:8px"></div>
+      </div>
+    </div>
+    <!-- Seviye sekmesi -->
+    <div id="tab-1" style="display:none">
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Seviye Tanımları</div><button class="btn btn-primary btn-sm" onclick="seviyeEkleModal()">+ Ekle</button></div>
+        <table><thead><tr><th>No</th><th>Seviye Adı</th><th style="width:80px">İşlem</th></tr></thead>
+        <tbody id="seviye-tablo"></tbody></table>
+      </div>
+    </div>
+    <!-- Test aşama sekmesi -->
+    <div id="tab-2" style="display:none">
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Test Aşamaları</div><button class="btn btn-primary btn-sm" onclick="asamaEkleModal()">+ Ekle</button></div>
+        <table><thead><tr><th>No</th><th>Aşama Adı</th><th style="width:80px">İşlem</th></tr></thead>
+        <tbody id="asama-tablo"></tbody></table>
+      </div>
+    </div>
+  </div>
+  <div id="platform-bos" class="card" style="display:flex;align-items:center;justify-content:center">
+    <div class="empty">Ayarlamak için sol taraftan bir platform seçin</div>
+  </div>
+</div>
+
+<!-- Platform modal -->
+<div class="modal-overlay" id="platform-modal">
+  <div class="modal">
+    <div class="modal-hd"><div class="modal-title" id="pm-baslik">Yeni Platform</div><span class="modal-close" onclick="modalKapat('platform-modal')">✕</span></div>
+    <div id="pm-alert"></div>
+    <div class="fg"><label class="fl">Platform Adı</label><input type="text" id="pm-adi"></div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="modalKapat('platform-modal')">İptal</button>
+      <button class="btn btn-primary" onclick="platformKaydet()">Kaydet</button>
+    </div>
+  </div>
+</div>
+
+<!-- Seviye modal -->
+<div class="modal-overlay" id="seviye-modal">
+  <div class="modal">
+    <div class="modal-hd"><div class="modal-title" id="sm-baslik">Yeni Seviye</div><span class="modal-close" onclick="modalKapat('seviye-modal')">✕</span></div>
+    <div class="fg"><label class="fl">Seviye Adı (örn: TGD, SGÖ)</label><input type="text" id="sm-adi"></div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="modalKapat('seviye-modal')">İptal</button>
+      <button class="btn btn-primary" onclick="seviyeKaydet()">Kaydet</button>
+    </div>
+  </div>
+</div>
+
+<!-- Aşama modal -->
+<div class="modal-overlay" id="asama-modal">
+  <div class="modal">
+    <div class="modal-hd"><div class="modal-title" id="am-baslik">Yeni Test Aşaması</div><span class="modal-close" onclick="modalKapat('asama-modal')">✕</span></div>
+    <div class="fg"><label class="fl">Aşama Adı (örn: FKT, BLG)</label><input type="text" id="am-adi"></div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="modalKapat('asama-modal')">İptal</button>
+      <button class="btn btn-primary" onclick="asamaKaydet()">Kaydet</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let platformlar=[], konfiglar=[], seciliPID=null, duzPlatform=null, duzSeviye=null, duzAsama=null;
+
+function yukle(){
+  fetch('/api/platform').then(r=>r.json()).then(d=>{platformlar=d;renderPlatformlar()});
+  fetch('/api/konfig').then(r=>r.json()).then(d=>konfiglar=d);
+}
+
+function renderPlatformlar(){
+  const el=document.getElementById('platform-liste');
+  el.innerHTML=platformlar.map(p=>`
+    <div onclick="platformSec(${p.PlatformID})" style="padding:9px 10px;border-radius:6px;cursor:pointer;margin-bottom:3px;border:1px solid ${seciliPID===p.PlatformID?'var(--accent)':'transparent'};background:${seciliPID===p.PlatformID?'var(--accent-bg)':'transparent'};transition:all .12s">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:12px;font-weight:500;color:${seciliPID===p.PlatformID?'var(--accent)':'var(--text)'}">${p.PlatformAdi}${p.HavuzMu?` <span class="badge b-amber" style="font-size:9px">HAVUZ</span>`:''}</div>
+        <div style="display:flex;gap:4px">
+          ${!p.HavuzMu?`<button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();platformDuzenle(${p.PlatformID},'${p.PlatformAdi.replace(/'/g,"\\'")}')">✎</button>`:''}
+          ${!p.HavuzMu?`<button class="btn btn-danger btn-xs" onclick="event.stopPropagation();platformSil(${p.PlatformID},'${p.PlatformAdi.replace(/'/g,"\\'")}')">✕</button>`:''}
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function platformSil(pid, adi){
+  if(!confirm(`"${adi}" platformunu ve tüm isterlerini silmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz!`))return;
+  fetch(`/api/platform/${pid}`,{method:'DELETE'}).then(r=>r.json()).then(d=>{
+    if(d.hata){alert(d.hata);return}
+    if(seciliPID===pid){
+      seciliPID=null;
+      document.getElementById('platform-detay').style.display='none';
+      document.getElementById('platform-bos').style.display='block';
+    }
+    fetch('/api/platform').then(r=>r.json()).then(d=>{platformlar=d;renderPlatformlar()});
+  });
+}
+
+function platformSec(pid){
+  seciliPID=pid;
+  renderPlatformlar();
+  const p=platformlar.find(x=>x.PlatformID===pid);
+  document.getElementById('detay-baslik').textContent=p.PlatformAdi;
+  document.getElementById('platform-detay').style.display='block';
+  document.getElementById('platform-bos').style.display='none';
+  yukleKonfig(pid);
+  yukleSeviye(pid);
+  yukleAsama(pid);
+}
+
+function tabSec(i){
+  document.querySelectorAll('.tab').forEach((t,j)=>t.classList.toggle('on',i===j));
+  [0,1,2].forEach(j=>document.getElementById('tab-'+j).style.display=i===j?'block':'none');
+}
+
+function yukleKonfig(pid){
+  fetch(`/api/platform/${pid}/konfig`).then(r=>r.json()).then(secili=>{
+    document.getElementById('konfig-checkboxlar').innerHTML=konfiglar.map(k=>`
+      <label style="display:flex;align-items:center;gap:5px;padding:5px 10px;border:1px solid ${secili.includes(k.KonfigID)?'var(--accent)':'var(--border2)'};background:${secili.includes(k.KonfigID)?'var(--accent-bg)':'transparent'};border-radius:5px;font-size:12px;cursor:pointer;transition:all .12s" id="kl-${k.KonfigID}">
+        <input type="checkbox" value="${k.KonfigID}" ${secili.includes(k.KonfigID)?'checked':''} style="width:auto" onchange="toggleKonfig(this,${k.KonfigID})">
+        ${k.KonfigAdi}
+      </label>`).join('');
+  });
+}
+
+function toggleKonfig(cb,kid){
+  const el=document.getElementById('kl-'+kid);
+  el.style.borderColor=cb.checked?'var(--accent)':'var(--border2)';
+  el.style.background=cb.checked?'var(--accent-bg)':'transparent';
+}
+
+function konfigKaydet(){
+  const ids=[...document.querySelectorAll('#konfig-checkboxlar input:checked')].map(c=>parseInt(c.value));
+  fetch(`/api/platform/${seciliPID}/konfig`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({konfig_ids:ids})})
+    .then(()=>{document.getElementById('konfig-alert').innerHTML='<div class="alert alert-ok">Konfigler kaydedildi.</div>';setTimeout(()=>document.getElementById('konfig-alert').innerHTML='',2000)});
+}
+
+function isterSetiOlustur(){
+  if(!confirm('Bu platform için ister seti yeniden oluşturulacak. Mevcut tüm isterler silinecek. Devam?'))return;
+  fetch(`/api/platform/${seciliPID}/ister_seti_olustur`,{method:'POST'})
+    .then(r=>r.json()).then(d=>{
+      const msg=d.hata?`<div class="alert alert-err">${d.hata}</div>`:`<div class="alert alert-ok">${d.mesaj}</div>`;
+      document.getElementById('konfig-alert').innerHTML=msg;
+    });
+}
+
+function yukleSeviye(pid){
+  fetch(`/api/platform/${pid}/seviye`).then(r=>r.json()).then(d=>{
+    const t=document.getElementById('seviye-tablo');
+    if(!d.length){t.innerHTML='<tr><td colspan="3" class="empty">Seviye tanımlanmamış</td></tr>';return}
+    t.innerHTML=d.map(s=>`<tr>
+      <td style="font-family:monospace;color:var(--text3)">${s.SeviyeNo}</td>
+      <td><b>${s.SeviyeAdi}</b></td>
+      <td>
+        <button class="btn btn-ghost btn-xs" onclick="seviyeDuzenle(${s.SeviyeID},'${s.SeviyeAdi.replace(/'/g,"\\'")}')">✎</button>
+        <button class="btn btn-danger btn-xs" onclick="seviyeSil(${s.SeviyeID})">✕</button>
+      </td>
+    </tr>`).join('');
+  });
+}
+
+function yukleAsama(pid){
+  fetch(`/api/platform/${pid}/test_asama`).then(r=>r.json()).then(d=>{
+    const t=document.getElementById('asama-tablo');
+    if(!d.length){t.innerHTML='<tr><td colspan="3" class="empty">Test aşaması tanımlanmamış</td></tr>';return}
+    t.innerHTML=d.map(a=>`<tr>
+      <td style="font-family:monospace;color:var(--text3)">${a.AsamaNo}</td>
+      <td><b>${a.AsamaAdi}</b></td>
+      <td>
+        <button class="btn btn-ghost btn-xs" onclick="asamaDuzenle(${a.TestAsamaID},'${a.AsamaAdi.replace(/'/g,"\\'")}')">✎</button>
+        <button class="btn btn-danger btn-xs" onclick="asamaSil(${a.TestAsamaID})">✕</button>
+      </td>
+    </tr>`).join('');
+  });
+}
+
+function yeniPlatformModal(){duzPlatform=null;document.getElementById('pm-baslik').textContent='Yeni Platform';document.getElementById('pm-adi').value='';document.getElementById('pm-alert').innerHTML='';document.getElementById('platform-modal').classList.add('on');document.getElementById('pm-adi').focus()}
+function platformDuzenle(id,adi){duzPlatform=id;document.getElementById('pm-baslik').textContent='Platform Düzenle';document.getElementById('pm-adi').value=adi;document.getElementById('pm-alert').innerHTML='';document.getElementById('platform-modal').classList.add('on')}
+function platformKaydet(){
+  const adi=document.getElementById('pm-adi').value.trim();
+  if(!adi)return;
+  const url=duzPlatform?`/api/platform/${duzPlatform}`:'/api/platform';
+  fetch(url,{method:duzPlatform?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({PlatformAdi:adi})})
+    .then(()=>{modalKapat('platform-modal');yukle()});
+}
+
+function seviyeEkleModal(){duzSeviye=null;document.getElementById('sm-baslik').textContent='Yeni Seviye';document.getElementById('sm-adi').value='';document.getElementById('seviye-modal').classList.add('on');document.getElementById('sm-adi').focus()}
+function seviyeDuzenle(id,adi){duzSeviye=id;document.getElementById('sm-baslik').textContent='Seviye Düzenle';document.getElementById('sm-adi').value=adi;document.getElementById('seviye-modal').classList.add('on')}
+function seviyeKaydet(){
+  const adi=document.getElementById('sm-adi').value.trim();
+  if(!adi)return;
+  const url=duzSeviye?`/api/seviye/${duzSeviye}`:`/api/platform/${seciliPID}/seviye`;
+  fetch(url,{method:duzSeviye?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({SeviyeAdi:adi})})
+    .then(()=>{modalKapat('seviye-modal');yukleSeviye(seciliPID)});
+}
+function seviyeSil(id){if(!confirm('Sil?'))return;fetch(`/api/seviye/${id}`,{method:'DELETE'}).then(()=>yukleSeviye(seciliPID))}
+
+function asamaEkleModal(){duzAsama=null;document.getElementById('am-baslik').textContent='Yeni Test Aşaması';document.getElementById('am-adi').value='';document.getElementById('asama-modal').classList.add('on');document.getElementById('am-adi').focus()}
+function asamaDuzenle(id,adi){duzAsama=id;document.getElementById('am-baslik').textContent='Aşama Düzenle';document.getElementById('am-adi').value=adi;document.getElementById('asama-modal').classList.add('on')}
+function asamaKaydet(){
+  const adi=document.getElementById('am-adi').value.trim();
+  if(!adi)return;
+  const url=duzAsama?`/api/test_asama/${duzAsama}`:`/api/platform/${seciliPID}/test_asama`;
+  fetch(url,{method:duzAsama?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({AsamaAdi:adi})})
+    .then(()=>{modalKapat('asama-modal');yukleAsama(seciliPID)});
+}
+function asamaSil(id){if(!confirm('Sil?'))return;fetch(`/api/test_asama/${id}`,{method:'DELETE'}).then(()=>yukleAsama(seciliPID))}
+
+function modalKapat(id){document.getElementById(id).classList.remove('on')}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.modal-overlay.on').forEach(m=>m.classList.remove('on'))});
+yukle();
+</script>
+{% endblock %}

@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+{% block title %}TA Dokümanları{% endblock %}
+{% block page_title %}TA Dokümanları{% endblock %}
+{% block page_sub %}İster Yönetimi{% endblock %}
+
+{% block content %}
+<div style="display:flex;gap:10px;align-items:center;margin-bottom:16px">
+  <select id="platform-sec" onchange="platformDegis()" style="width:180px"><option value="">Platform seçin...</option></select>
+  <button class="btn btn-primary btn-sm" id="btn-yeni-ta" onclick="yeniTaModal()" style="display:none">+ Yeni TA</button>
+</div>
+
+<div style="display:grid;grid-template-columns:240px 1fr;gap:12px;height:calc(100vh - 155px)">
+  <div class="card" style="overflow-y:auto">
+    <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">TA Dokümanları</div>
+    <div id="ta-liste"><div class="empty">Platform seçin</div></div>
+  </div>
+  <div class="card" style="overflow-y:auto" id="ta-detay">
+    <div class="empty">Soldaki listeden bir TA dokümanı seçin</div>
+  </div>
+</div>
+
+<!-- Yeni TA Modal -->
+<div class="modal-overlay" id="ta-modal">
+  <div class="modal" style="max-width:700px">
+    <div class="modal-hd">
+      <div class="modal-title" id="tam-baslik">Yeni TA Dokümanı</div>
+      <span class="modal-close" onclick="modalKapat('ta-modal')">✕</span>
+    </div>
+    <div id="tam-alert"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+      <div class="fg"><label class="fl">Sol Sistem Adı</label><input type="text" id="tam-sol"></div>
+      <div class="fg"><label class="fl">Sağ Sistem Adı</label><input type="text" id="tam-sag"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+      <div>
+        <div style="font-size:11px;font-weight:500;color:var(--text2);margin-bottom:8px" id="tam-sol-label">Sol Sistem</div>
+        <div style="margin-bottom:8px">
+          <div style="font-size:10px;color:var(--text3);margin-bottom:4px">Aldığı Veriler</div>
+          <textarea id="tam-sol-aldigi" rows="4" placeholder="Her satıra bir veri..."></textarea>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:4px">Verdiği Veriler</div>
+          <textarea id="tam-sol-verdigi" rows="4" placeholder="Her satıra bir veri..."></textarea>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:500;color:var(--text2);margin-bottom:8px" id="tam-sag-label">Sağ Sistem</div>
+        <div style="margin-bottom:8px">
+          <div style="font-size:10px;color:var(--text3);margin-bottom:4px">Aldığı Veriler</div>
+          <textarea id="tam-sag-aldigi" rows="4" placeholder="Her satıra bir veri..."></textarea>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:4px">Verdiği Veriler</div>
+          <textarea id="tam-sag-verdigi" rows="4" placeholder="Her satıra bir veri..."></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="modalKapat('ta-modal')">İptal</button>
+      <button class="btn btn-primary" onclick="taKaydet()">Kaydet</button>
+    </div>
+  </div>
+</div>
+
+<!-- SGÖ Bağlama Modal -->
+<div class="modal-overlay" id="sgo-modal">
+  <div class="modal">
+    <div class="modal-hd"><div class="modal-title">SGÖ Bağla</div><span class="modal-close" onclick="modalKapat('sgo-modal')">✕</span></div>
+    <div style="font-size:11px;color:var(--text2);margin-bottom:10px">Bu TA dokümanına bağlanacak SGÖ isterini seçin:</div>
+    <select id="sgo-sec" style="margin-bottom:12px"></select>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="modalKapat('sgo-modal')">İptal</button>
+      <button class="btn btn-primary" onclick="sgoBagla()">Bağla</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let seciliPID=null, seciliTaID=null, duzTaID=null, sgoNodelar=[];
+
+fetch('/api/platform').then(r=>r.json()).then(d=>{
+  document.getElementById('platform-sec').innerHTML='<option value="">Platform seçin...</option>'+
+    d.map(p=>`<option value="${p.PlatformID}">${p.PlatformAdi}</option>`).join('');
+});
+
+function platformDegis(){
+  seciliPID=document.getElementById('platform-sec').value||null;
+  if(!seciliPID)return;
+  document.getElementById('btn-yeni-ta').style.display='inline-flex';
+  yukleTaListesi();
+  // SGÖ node'larını yükle (bağlama için)
+  fetch(`/api/platform/${seciliPID}/ister_agaci`).then(r=>r.json()).then(d=>{
+    // Seviye 2 (SGÖ) node'larını filtrele
+    var maxNo=d.length?Math.max(...d.map(n=>n.SeviyeNo)):2; sgoNodelar=d.filter(n=>n.SeviyeNo>=maxNo&&!d.some(c=>c.ParentID===n.NodeID));
+    document.getElementById('sgo-sec').innerHTML=sgoNodelar.map(n=>'<option value="'+n.NodeID+'">'+(n.NodeNumarasi?n.NodeNumarasi+' — ':'')+(n.Icerik||'(boş)')+'</option>').join('');
+  });
+}
+
+function yukleTaListesi(){
+  fetch(`/api/platform/${seciliPID}/ta`).then(r=>r.json()).then(d=>{
+    const el=document.getElementById('ta-liste');
+    if(!d.length){el.innerHTML='<div class="empty">TA dokümanı yok</div>';return}
+    el.innerHTML=d.map(ta=>`
+      <div onclick="taDetay(${ta.TaID})" style="padding:9px 10px;border-radius:6px;cursor:pointer;margin-bottom:4px;border:1px solid ${seciliTaID===ta.TaID?'var(--accent)':'var(--amber-border)'};background:${seciliTaID===ta.TaID?'var(--accent-bg)':'var(--amber-bg)'}">
+        <div style="font-size:11px;font-weight:600;color:${seciliTaID===ta.TaID?'var(--accent)':'var(--amber)'}">${ta.Adi}</div>
+        <div style="font-size:10px;color:var(--text2);margin-top:2px">${ta.SolSistemAdi||'?'} ↔ ${ta.SagSistemAdi||'?'}</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:1px">${ta.SgoBaglanti} SGÖ bağlı</div>
+      </div>`).join('');
+  });
+}
+
+function taDetay(taId){
+  seciliTaID=taId;
+  yukleTaListesi();
+  fetch(`/api/ta/${taId}`).then(r=>r.json()).then(ta=>{
+    const solAldigi=ta.veriler.filter(v=>v.Sistem==='sol'&&v.Yon==='aldigi');
+    const solVerdigi=ta.veriler.filter(v=>v.Sistem==='sol'&&v.Yon==='verdigi');
+    const sagAldigi=ta.veriler.filter(v=>v.Sistem==='sag'&&v.Yon==='aldigi');
+    const sagVerdigi=ta.veriler.filter(v=>v.Sistem==='sag'&&v.Yon==='verdigi');
+
+    document.getElementById('ta-detay').innerHTML=`
+      <div class="card-hd">
+        <div>
+          <div style="font-size:15px;font-weight:600;color:var(--amber)">${ta.Adi}</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px">${ta.SgoBaglanti||ta.sgo_ler?.length||0} SGÖ bağlı</div>
+        </div>
+        <div style="display:flex;gap:5px">
+          <button class="btn btn-ghost btn-sm" onclick="taDuzenleModal(${ta.TaID})">Düzenle</button>
+          <button class="btn btn-primary btn-sm" onclick="document.getElementById('sgo-modal').classList.add('on')">+ SGÖ Bağla</button>
+          <button class="btn btn-ghost btn-sm" onclick="printTa(${ta.TaID})">⎙ PDF</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
+        ${renderSistemKart(ta.SolSistemAdi, solAldigi, solVerdigi)}
+        ${renderSistemKart(ta.SagSistemAdi, sagAldigi, sagVerdigi)}
+      </div>
+      <div>
+        <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Bağlı SGÖ'ler</div>
+        ${ta.sgo_ler?.length?ta.sgo_ler.map(s=>`
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--bg3);border-radius:5px;border:1px solid var(--border);margin-bottom:5px">
+            <div style="font-size:12px">${s.Icerik||'(boş)'}</div>
+            <button class="btn btn-danger btn-xs" onclick="sgoBagKaldir(${ta.TaID},${s.NodeID})">Kaldır</button>
+          </div>`).join(''):'<div style="font-size:12px;color:var(--text3)">Bağlı SGÖ yok</div>'}
+      </div>
+    `;
+  });
+}
+
+function renderSistemKart(ad, aldigi, verdigi){
+  return `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:14px">
+    <div style="font-size:12px;font-weight:600;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)">${ad||'—'}</div>
+    <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Aldığı Veriler</div>
+    ${aldigi.length?aldigi.map(v=>`<div style="font-size:12px;padding:3px 0;color:var(--text)">• ${v.Icerik}</div>`).join(''):'<div style="font-size:11px;color:var(--text3)">—</div>'}
+    <div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-top:10px;margin-bottom:6px">Verdiği Veriler</div>
+    ${verdigi.length?verdigi.map(v=>`<div style="font-size:12px;padding:3px 0;color:var(--text)">• ${v.Icerik}</div>`).join(''):'<div style="font-size:11px;color:var(--text3)">—</div>'}
+  </div>`;
+}
+
+function yeniTaModal(){
+  duzTaID=null;
+  ['tam-sol','tam-sag','tam-sol-aldigi','tam-sol-verdigi','tam-sag-aldigi','tam-sag-verdigi'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('tam-baslik').textContent='Yeni TA Dokümanı';
+  document.getElementById('ta-modal').classList.add('on');
+}
+
+function taDuzenleModal(taId){
+  duzTaID=taId;
+  fetch(`/api/ta/${taId}`).then(r=>r.json()).then(ta=>{
+    document.getElementById('tam-sol').value=ta.SolSistemAdi||'';
+    document.getElementById('tam-sag').value=ta.SagSistemAdi||'';
+    const sa=ta.veriler.filter(v=>v.Sistem==='sol'&&v.Yon==='aldigi').map(v=>v.Icerik).join('\n');
+    const sv=ta.veriler.filter(v=>v.Sistem==='sol'&&v.Yon==='verdigi').map(v=>v.Icerik).join('\n');
+    const ga=ta.veriler.filter(v=>v.Sistem==='sag'&&v.Yon==='aldigi').map(v=>v.Icerik).join('\n');
+    const gv=ta.veriler.filter(v=>v.Sistem==='sag'&&v.Yon==='verdigi').map(v=>v.Icerik).join('\n');
+    document.getElementById('tam-sol-aldigi').value=sa;
+    document.getElementById('tam-sol-verdigi').value=sv;
+    document.getElementById('tam-sag-aldigi').value=ga;
+    document.getElementById('tam-sag-verdigi').value=gv;
+    document.getElementById('tam-baslik').textContent='TA Düzenle — '+ta.Adi;
+    document.getElementById('ta-modal').classList.add('on');
+  });
+}
+
+function taKaydet(){
+  const sol=document.getElementById('tam-sol').value.trim();
+  const sag=document.getElementById('tam-sag').value.trim();
+  const veriler=[];
+  const ekle=(txt,sistem,yon)=>{txt.split('\n').filter(s=>s.trim()).forEach((s,i)=>veriler.push({sistem,yon,icerik:s.trim(),sira:i}))};
+  ekle(document.getElementById('tam-sol-aldigi').value,'sol','aldigi');
+  ekle(document.getElementById('tam-sol-verdigi').value,'sol','verdigi');
+  ekle(document.getElementById('tam-sag-aldigi').value,'sag','aldigi');
+  ekle(document.getElementById('tam-sag-verdigi').value,'sag','verdigi');
+  if(duzTaID){
+    fetch(`/api/ta/${duzTaID}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({SolSistemAdi:sol,SagSistemAdi:sag,veriler})})
+      .then(()=>{modalKapat('ta-modal');yukleTaListesi();taDetay(duzTaID)});
+  }else{
+    fetch(`/api/platform/${seciliPID}/ta`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({SolSistemAdi:sol,SagSistemAdi:sag})})
+      .then(r=>r.json()).then(d=>{
+        fetch(`/api/ta/${d.TaID}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({SolSistemAdi:sol,SagSistemAdi:sag,veriler})})
+          .then(()=>{modalKapat('ta-modal');yukleTaListesi()});
+      });
+  }
+}
+
+function sgoBagla(){
+  const nodeId=parseInt(document.getElementById('sgo-sec').value);
+  fetch(`/api/ta/${seciliTaID}/sgo_bagla`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({NodeID:nodeId})})
+    .then(r=>r.json()).then(d=>{ if(d.hata){alert(d.hata);return;} modalKapat('sgo-modal'); taDetay(seciliTaID); });
+}
+
+function sgoBagKaldir(taId,nodeId){
+  if(!confirm('Bağlantıyı kaldır?'))return;
+  fetch(`/api/ta/${taId}/sgo_bag_kaldir/${nodeId}`,{method:'DELETE'}).then(()=>taDetay(taId));
+}
+
+function modalKapat(id){document.getElementById(id).classList.remove('on')}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.modal-overlay.on').forEach(m=>m.classList.remove('on'))});
+
+function printTa(taId){
+  fetch(`/api/export/ta_dokuman/${taId}`).then(r=>r.json()).then(ta=>{
+    const solAldigi=ta.veriler.filter(v=>v.Sistem==='sol'&&v.Yon==='aldigi');
+    const solVerdigi=ta.veriler.filter(v=>v.Sistem==='sol'&&v.Yon==='verdigi');
+    const sagAldigi=ta.veriler.filter(v=>v.Sistem==='sag'&&v.Yon==='aldigi');
+    const sagVerdigi=ta.veriler.filter(v=>v.Sistem==='sag'&&v.Yon==='verdigi');
+    const w=window.open('','_blank');
+    w.document.write(`<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8">
+    <title>${ta.Adi}</title>
+    <style>
+      body{font-family:'Segoe UI',sans-serif;font-size:12px;padding:24px;max-width:900px;margin:0 auto;color:#1a2332}
+      h1{font-size:20px;color:#d97706;margin-bottom:4px}
+      .sub{font-size:11px;color:#8fa0b8;margin-bottom:24px}
+      .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+      .sistem{border:1px solid #dde3ec;border-radius:8px;padding:16px}
+      .sh{font-size:13px;font-weight:600;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid #dde3ec}
+      .vb{font-size:9px;font-weight:600;color:#8fa0b8;text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px;margin-top:12px}
+      .vs{font-size:12px;padding:3px 0}
+      .sgo-list{border:1px solid #dde3ec;border-radius:6px;padding:12px}
+      .sgo-item{padding:8px;border-bottom:1px solid #f0f3f7;font-size:12px}
+      .sgo-item:last-child{border-bottom:none}
+      @media print{button{display:none}}
+    </style></head><body>
+    <h1>${ta.Adi}</h1>
+    <div class="sub">${new Date().toLocaleDateString('tr-TR',{day:'2-digit',month:'long',year:'numeric'})}</div>
+    <button onclick="window.print()" style="margin-bottom:20px;padding:6px 14px;background:#d97706;color:#fff;border:none;border-radius:5px;cursor:pointer">Yazdır / PDF</button>
+    <div class="grid">
+      <div class="sistem">
+        <div class="sh">${ta.SolSistemAdi||'Sol Sistem'}</div>
+        <div class="vb">Aldığı Veriler</div>
+        ${solAldigi.length?solAldigi.map(v=>`<div class="vs">• ${v.Icerik}</div>`).join(''):'<div class="vs" style="color:#8fa0b8">—</div>'}
+        <div class="vb">Verdiği Veriler</div>
+        ${solVerdigi.length?solVerdigi.map(v=>`<div class="vs">• ${v.Icerik}</div>`).join(''):'<div class="vs" style="color:#8fa0b8">—</div>'}
+      </div>
+      <div class="sistem">
+        <div class="sh">${ta.SagSistemAdi||'Sağ Sistem'}</div>
+        <div class="vb">Aldığı Veriler</div>
+        ${sagAldigi.length?sagAldigi.map(v=>`<div class="vs">• ${v.Icerik}</div>`).join(''):'<div class="vs" style="color:#8fa0b8">—</div>'}
+        <div class="vb">Verdiği Veriler</div>
+        ${sagVerdigi.length?sagVerdigi.map(v=>`<div class="vs">• ${v.Icerik}</div>`).join(''):'<div class="vs" style="color:#8fa0b8">—</div>'}
+      </div>
+    </div>
+    ${ta.sgo_ler?.length?`<h2 style="font-size:14px;margin-bottom:10px">Bağlı SGÖ'ler</h2>
+    <div class="sgo-list">${ta.sgo_ler.map(s=>`<div class="sgo-item">${s.Icerik||''}</div>`).join('')}</div>`:''}
+    </body></html>`);
+    w.document.close();
+  });
+}
+</script>
+{% endblock %}
