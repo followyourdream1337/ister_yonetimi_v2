@@ -8,9 +8,9 @@ from enum import Enum
 app = Flask(__name__)
 app.secret_key = 'ister_v2_secret_2024'
 app.config['MYSQL_HOST'] = 'sql8.freesqldatabase.com'
-app.config['MYSQL_USER'] = 'sql8820996'
-app.config['MYSQL_PASSWORD'] = 'KjmvNC1FV6'
-app.config['MYSQL_DB'] = 'sql8820996'
+app.config['MYSQL_USER'] = 'sql8821741'
+app.config['MYSQL_PASSWORD'] = '76P5jKmkAb'  # Updated password for root user
+app.config['MYSQL_DB'] = 'sql8821741'
 app.config['MYSQL_CHARSET'] = 'utf8mb4'
 mysql = MySQL(app)
 
@@ -617,7 +617,6 @@ def ister_node_sil(nid):
 @app.route('/api/platform/<int:pid>/ister_seti_olustur', methods=['POST'])
 @login_gerekli
 def ister_seti_olustur(pid):
-    print(pid)
     cur = cur_dict(); cur2 = mysql.connection.cursor()
     # Havuz platformunu bul
     cur.execute("SELECT PlatformID FROM platform_list WHERE HavuzMu=1 LIMIT 1")
@@ -625,11 +624,9 @@ def ister_seti_olustur(pid):
     if not havuz:
         cur.close(); return jsonify({'hata': 'Havuz platformu bulunamadı.'}), 400
     havuz_pid = havuz['PlatformID']
-    print(havuz_pid)
     # Platformun seçili konfiglerini al
     cur.execute("SELECT KonfigID FROM platform_konfig WHERE PlatformID=%s", (pid,))
     konfig_ids = [r['KonfigID'] for r in cur.fetchall()]
-    print(konfig_ids)
 
     if not konfig_ids:
         cur.close(); return jsonify({'hata': 'Platform için konfig seçilmemiş. Konfigleri kaydetiğinizden emin olun!'}), 400
@@ -674,10 +671,10 @@ def ister_seti_olustur(pid):
             continue  # Bu platformda bu seviye yok, atla
         yeni_seviye_id = plat_sev_map[sev_no]
         yeni_parent = id_map.get(hn['ParentID']) if hn['ParentID'] else None
-        cur2.execute("""INSERT INTO ister_node (PlatformID,SeviyeID,ParentID,HavuzNodeID,KonfigID,NodeNumarasi,Icerik,TestYontemiID,OlusturanID)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+        cur2.execute("""INSERT INTO ister_node (PlatformID,SeviyeID,ParentID,HavuzNodeID,KonfigID,NodeNumarasi,Icerik,TestYontemiID,OlusturanID,HavuzKodu)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                      (pid, yeni_seviye_id, yeni_parent, hn['NodeID'], hn['KonfigID'],
-                      hn.get('NodeNumarasi',''), hn['Icerik'], hn['TestYontemiID'], session['kullanici_id']))
+                      hn.get('NodeNumarasi',''), hn['Icerik'], hn['TestYontemiID'], session['kullanici_id'], hn.get('HavuzKodu','')))
         mysql.connection.commit()
         id_map[hn['NodeID']] = cur2.lastrowid
 
